@@ -836,17 +836,20 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
                 ),
               ),
             ),
-            // Dismiss hint bottom-centre
+            // Close button top-right
             Positioned(
-              bottom: 24,
-              left: 0,
-              right: 0,
-              child: Text(
-                'Tap anywhere to close',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.3),
-                  fontSize: 13,
+              top: 20,
+              right: 20,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
                 ),
               ),
             ),
