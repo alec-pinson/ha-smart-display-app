@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/display_state/display_state.dart';
 import '../../core/display_state/display_state_notifier.dart';
@@ -25,6 +26,9 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
   StreamSubscription? _alertSub;
   StreamSubscription? _notificationSub;
   StreamSubscription? _openCameraSub;
+  // Tracks the currently-showing modal notification so we can dismiss it
+  // before showing the next one (prevents scrim stacking).
+  Route<void>? _currentNotificationRoute;
 
   @override
   void initState() {
@@ -36,6 +40,10 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     )..repeat();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Request microphone permission for wake-word detection.
+      // Done here (post-frame) so the Activity is fully ready to show the dialog.
+      _requestPermissions();
+
       ref.read(displayStateProvider.notifier).pushInitialState();
 
       // Initialise timer service
@@ -65,6 +73,13 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     });
   }
 
+  Future<void> _requestPermissions() async {
+    // Microphone — needed for wake-word detection ("Hey Jarvis" etc.)
+    if (await Permission.microphone.isDenied) {
+      await Permission.microphone.request();
+    }
+  }
+
   void _showFiringAlert(FiringAlert alert) {
     showDialog(
       context: context,
@@ -82,12 +97,24 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
       case 'banner':
         _showOverlay((onDone) => _BannerOverlay(notification: notification, notifier: notifier, onDone: onDone));
       default:
-        showDialog(
+        // Pop any existing notification dialog before showing the new one
+        // so scrims don't stack and darken the screen.
+        if (_currentNotificationRoute != null) {
+          Navigator.of(context).removeRoute(_currentNotificationRoute!);
+          _currentNotificationRoute = null;
+        }
+        final route = DialogRoute<void>(
           context: context,
           barrierDismissible: true,
           barrierColor: Colors.black38,
           builder: (_) => _NotificationDialog(notification: notification, notifier: notifier),
         );
+        _currentNotificationRoute = route;
+        Navigator.of(context).push(route).then((_) {
+          if (_currentNotificationRoute == route) {
+            _currentNotificationRoute = null;
+          }
+        });
     }
   }
 
