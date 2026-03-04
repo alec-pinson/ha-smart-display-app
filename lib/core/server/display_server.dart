@@ -136,11 +136,12 @@ class DisplayServer {
     _ref.read(displayStateProvider.notifier).applyCommand(payload);
   }
 
-  void broadcastState(DisplayState state, {String? dismissedTimer, String? dismissedAlarm}) {
+  void broadcastState(DisplayState state, {String? dismissedTimer, String? dismissedAlarm, String? focusedCamera}) {
     if (_clients.isEmpty) return;
     final json = state.toJson();
     if (dismissedTimer != null) json['dismissed_timer'] = dismissedTimer;
     if (dismissedAlarm != null) json['dismissed_alarm'] = dismissedAlarm;
+    json['focused_camera'] = focusedCamera; // always sent; null = none
     final msg = jsonEncode({'type': 'state', 'state': json});
     for (final client in List.of(_clients)) {
       try {

@@ -255,7 +255,7 @@ class _NormalOverlay extends ConsumerWidget {
         Positioned.fill(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 600),
-            child: _buildModeContent(state),
+            child: _buildModeContent(state, context, ref),
           ),
         ),
 
@@ -279,7 +279,7 @@ class _NormalOverlay extends ConsumerWidget {
     );
   }
 
-  Widget _buildModeContent(DisplayState state) {
+  Widget _buildModeContent(DisplayState state, BuildContext context, WidgetRef ref) {
     switch (state.ambientMode) {
       case 'weather':
         return _AmbientWeatherFull(
@@ -290,6 +290,18 @@ class _NormalOverlay extends ConsumerWidget {
         return _AmbientCameraGrid(
           key: const ValueKey('cameras'),
           cameras: state.cameras,
+          onCameraTap: (camera) {
+            final notifier = ref.read(displayStateProvider.notifier);
+            notifier.setFocusedCamera(camera.id);
+            showDialog(
+              context: context,
+              barrierColor: Colors.black,
+              builder: (_) => _CameraFullScreen(
+                initialCamera: camera,
+                notifier: notifier,
+              ),
+            ).then((_) => notifier.setFocusedCamera(null));
+          },
         );
       default:
         return const SizedBox.expand(key: ValueKey('clock'));
@@ -632,7 +644,8 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
 
 class _AmbientCameraGrid extends StatelessWidget {
   final List<CameraData> cameras;
-  const _AmbientCameraGrid({super.key, required this.cameras});
+  final void Function(CameraData)? onCameraTap;
+  const _AmbientCameraGrid({super.key, required this.cameras, this.onCameraTap});
 
   @override
   Widget build(BuildContext context) {
@@ -644,10 +657,10 @@ class _AmbientCameraGrid extends StatelessWidget {
     final rows = <Widget>[];
     for (int i = 0; i < cameras.length; i += 2) {
       final rowChildren = <Widget>[
-        Expanded(child: _CameraTile(camera: cameras[i])),
+        Expanded(child: _tile(cameras[i])),
         if (i + 1 < cameras.length) ...[
           const SizedBox(width: gap),
-          Expanded(child: _CameraTile(camera: cameras[i + 1])),
+          Expanded(child: _tile(cameras[i + 1])),
         ] else
           const Expanded(child: SizedBox()),
       ];
@@ -660,41 +673,50 @@ class _AmbientCameraGrid extends StatelessWidget {
       child: Column(children: rows),
     );
   }
+
+  Widget _tile(CameraData camera) => _CameraTile(
+        camera: camera,
+        onTap: onCameraTap != null ? () => onCameraTap!(camera) : null,
+      );
 }
 
 class _CameraTile extends StatelessWidget {
   final CameraData camera;
-  const _CameraTile({required this.camera});
+  final VoidCallback? onTap;
+  const _CameraTile({required this.camera, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image.memory(camera.imageBytes, fit: BoxFit.cover),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [Colors.black87, Colors.transparent],
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.memory(camera.imageBytes, fit: BoxFit.cover),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black87, Colors.transparent],
+                  ),
+                ),
+                child: Text(
+                  camera.name,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              child: Text(
-                camera.name,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                overflow: TextOverflow.ellipsis,
-              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -707,6 +729,86 @@ class _AmbientClockFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(child: _AmbientClock());
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Full-screen live camera view
+// ---------------------------------------------------------------------------
+
+class _CameraFullScreen extends StatefulWidget {
+  final CameraData initialCamera;
+  final DisplayStateNotifier notifier;
+  const _CameraFullScreen({required this.initialCamera, required this.notifier});
+
+  @override
+  State<_CameraFullScreen> createState() => _CameraFullScreenState();
+}
+
+class _CameraFullScreenState extends State<_CameraFullScreen> {
+  late CameraData _current;
+  StreamSubscription<CameraData>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.initialCamera;
+    _sub = widget.notifier.focusedCameraStream.listen((cam) {
+      if (mounted) setState(() => _current = cam);
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.memory(
+              _current.imageBytes,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            ),
+            // Camera name bottom-left
+            Positioned(
+              bottom: 24,
+              left: 24,
+              child: Text(
+                _current.name,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w300,
+                ),
+              ),
+            ),
+            // Dismiss hint bottom-centre
+            Positioned(
+              bottom: 24,
+              left: 0,
+              right: 0,
+              child: Text(
+                'Tap anywhere to close',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.3),
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

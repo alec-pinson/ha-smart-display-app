@@ -31,8 +31,18 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   Timer? _heartbeatTimer;
   final DateTime _startTime = DateTime.now();
 
+  String? _focusedCamera;
+
   final _notificationController = StreamController<NotificationData>.broadcast();
   Stream<NotificationData> get notificationStream => _notificationController.stream;
+
+  final _focusedCameraController = StreamController<CameraData>.broadcast();
+  Stream<CameraData> get focusedCameraStream => _focusedCameraController.stream;
+
+  void setFocusedCamera(String? id) {
+    _focusedCamera = id;
+    _pushState();
+  }
 
   DisplayStateNotifier(this._ref)
       : super(const DisplayState(
@@ -108,6 +118,15 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       }).toList();
       newState = newState.copyWith(cameras: cameras);
     }
+    if (payload.containsKey('focused_camera_data')) {
+      final c = payload['focused_camera_data'] as Map<String, dynamic>;
+      final bytes = base64Decode(c['data'] as String);
+      _focusedCameraController.add(CameraData(
+        id: c['id'] as String,
+        name: c['name'] as String,
+        imageBytes: Uint8List.fromList(bytes),
+      ));
+    }
     if (payload.containsKey('notification')) {
       final n = payload['notification'] as Map<String, dynamic>;
       _notificationController.add(NotificationData(
@@ -139,14 +158,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     final newTimers = state.timers.where((t) => t.id != timerId).toList();
     state = state.copyWith(timers: newTimers);
     // Report back to HA
-    _ref.read(displayServerProvider).broadcastState(state, dismissedTimer: timerId);
+    _ref.read(displayServerProvider).broadcastState(state, dismissedTimer: timerId, focusedCamera: _focusedCamera);
   }
 
   /// Called when user dismisses an alarm on the device
   void dismissAlarm(String alarmId) {
     final newAlarms = state.alarms.where((a) => a.id != alarmId).toList();
     state = state.copyWith(alarms: newAlarms);
-    _ref.read(displayServerProvider).broadcastState(state, dismissedAlarm: alarmId);
+    _ref.read(displayServerProvider).broadcastState(state, dismissedAlarm: alarmId, focusedCamera: _focusedCamera);
   }
 
   void recordWakeWordDetection() {
@@ -157,7 +176,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   void pushInitialState() => _pushState();
 
   void _pushState() {
-    _ref.read(displayServerProvider).broadcastState(state);
+    _ref.read(displayServerProvider).broadcastState(state, focusedCamera: _focusedCamera);
   }
 
   Future<void> _applyBrightness(int value) async {
@@ -175,6 +194,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   void dispose() {
     _heartbeatTimer?.cancel();
     _notificationController.close();
+    _focusedCameraController.close();
     super.dispose();
   }
 }

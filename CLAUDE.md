@@ -12,7 +12,8 @@ JAVA_HOME=/usr/local/opt/openjdk@17 flutter run -d emulator-5554
 adb shell pm clear com.example.ha_smart_display
 
 # Expose port to LAN for HA testing
-adb kill-server && ADB_SERVER_SOCKET=tcp:0.0.0.0:5037 adb -a nodaemon server start &
+adb kill-server && pkill -f "adb" 2>/dev/null
+adb -a nodaemon server start &
 adb forward tcp:8472 tcp:8472
 ```
 
@@ -34,7 +35,28 @@ HA sends command → DisplayServer._handleCommand()
 
 User dismisses timer → DisplayStateNotifier.dismissTimer()
   → DisplayServer.broadcastState(dismissedTimer: id) → HA removes it
+
+User taps camera tile → DisplayStateNotifier.setFocusedCamera(id)
+  → broadcastState(focusedCamera: id) → HA starts 1fps focused_camera_data loop
+  → _CameraFullScreen subscribes to focusedCameraStream → shows live feed
+  → on dismiss: setFocusedCamera(null) → HA stops fast loop
 ```
+
+## Key data classes (`display_state.dart`)
+| Class           | Fields                                                              |
+| --------------- | ------------------------------------------------------------------- |
+| `DisplayState`  | all state fields incl. `photos`, `cameras`, `timers`, `alarms`     |
+| `WeatherData`   | `condition`, `temperature`, `temperatureUnit`, `humidity`, `windSpeed`, `forecast` |
+| `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability` |
+| `CameraData`    | `id`, `name`, `imageBytes` (Uint8List)                              |
+| `TimerData`     | `id`, `label`, `endsAt`                                             |
+| `AlarmData`     | `id`, `label`, `time`                                               |
+
+## Streams exposed by DisplayStateNotifier
+| Stream                  | Type              | Purpose                                  |
+| ----------------------- | ----------------- | ---------------------------------------- |
+| `notificationStream`    | `NotificationData`| Transient notification overlays          |
+| `focusedCameraStream`   | `CameraData`      | Live camera frames for full-screen view  |
 
 ## Adding a new command key
 1. Add field to `DisplayState` + `copyWith()` + `toJson()`
