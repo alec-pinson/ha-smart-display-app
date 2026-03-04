@@ -8,13 +8,15 @@ Flutter kiosk app for Echo Show 8 (LineageOS). See root `CLAUDE.md` for full arc
 # Run on emulator
 JAVA_HOME=/usr/local/opt/openjdk@17 flutter run -d emulator-5554
 
-# Reset pairing state
-adb shell pm clear com.example.ha_smart_display
+# After flutter run restarts, re-forward port (drops on each restart)
+adb -s emulator-5554 forward tcp:8472 tcp:8472
 
-# Expose port to LAN for HA testing
-adb kill-server && pkill -f "adb" 2>/dev/null
-adb -a nodaemon server start &
-adb forward tcp:8472 tcp:8472
+# Reset pairing state
+adb -s emulator-5554 shell pm clear com.example.ha_smart_display
+
+# Build + install on Echo Show 8 (device ID: G0918309042301JB)
+JAVA_HOME=/usr/local/opt/openjdk@17 flutter build apk --debug
+adb -s G0918309042301JB install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
 ## Key providers
@@ -40,29 +42,47 @@ User taps camera tile → DisplayStateNotifier.setFocusedCamera(id)
   → broadcastState(focusedCamera: id) → HA starts 1fps focused_camera_data loop
   → _CameraFullScreen subscribes to focusedCameraStream → shows live feed
   → on dismiss: setFocusedCamera(null) → HA stops fast loop
+
+HA sends open_camera → openCameraStream fires → _CameraFullScreen dialog shown
+  → same focused camera loop as above
+
+User presses notification button → DisplayStateNotifier.sendNotificationAction()
+  → DisplayServer.sendEvent({event: notification_action, button, index}) → HA event fired
 ```
 
 ## Key data classes (`display_state.dart`)
-| Class           | Fields                                                              |
-| --------------- | ------------------------------------------------------------------- |
-| `DisplayState`  | all state fields incl. `photos`, `cameras`, `timers`, `alarms`     |
+| Class           | Fields                                                                         |
+| --------------- | ------------------------------------------------------------------------------ |
+| `DisplayState`  | all state fields incl. `photos`, `cameras`, `timers`, `alarms`                 |
 | `WeatherData`   | `condition`, `temperature`, `temperatureUnit`, `humidity`, `windSpeed`, `forecast` |
-| `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability` |
-| `CameraData`    | `id`, `name`, `imageBytes` (Uint8List)                              |
-| `TimerData`     | `id`, `label`, `endsAt`                                             |
-| `AlarmData`     | `id`, `label`, `time`                                               |
+| `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability`             |
+| `CameraData`    | `id`, `name`, `imageBytes` (Uint8List)                                         |
+| `TimerData`     | `id`, `label`, `endsAt` (uses `remaining_seconds` from HA if present)          |
+| `AlarmData`     | `id`, `label`, `time` (HH:MM — seconds stripped from HA time selector output)  |
 
 ## Streams exposed by DisplayStateNotifier
-| Stream                  | Type              | Purpose                                  |
-| ----------------------- | ----------------- | ---------------------------------------- |
-| `notificationStream`    | `NotificationData`| Transient notification overlays          |
-| `focusedCameraStream`   | `CameraData`      | Live camera frames for full-screen view  |
+| Stream                | Type              | Purpose                                            |
+| --------------------- | ----------------- | -------------------------------------------------- |
+| `notificationStream`  | `NotificationData`| Transient notification overlays                    |
+| `focusedCameraStream` | `CameraData`      | Live camera frames for full-screen view            |
+| `openCameraStream`    | `CameraData`      | HA-triggered open_camera command (empty imageBytes)|
+
+## Audio (TimerService)
+Two independent `AudioPlayer` instances:
+- `_chimePlayer` — fires when a timer/alarm expires on-device; loops until user dismisses the alert
+- `_haAlarmPlayer` — controlled by HA `alarm_sounding` command; loops until HA turns switch off
+
+Asset: `assets/audio/timer_chime.mp3` — 3-note C-E-G ascending chime, ~2s.
+
+## Brightness
+Uses `window.attributes.screenBrightness` (Android `WindowManager.LayoutParams`) — controls
+app window brightness directly. No `WRITE_SETTINGS` permission needed.
+
+## Permissions
+`permission_handler` package requests `RECORD_AUDIO` at first launch (via post-frame callback
+in `AmbientScreen.initState`). Needed for future wake-word detection feature.
 
 ## Adding a new command key
 1. Add field to `DisplayState` + `copyWith()` + `toJson()`
 2. Handle key in `DisplayStateNotifier.applyCommand()`
-3. Add corresponding entity in HA integration
-
-## Audio asset
-`assets/audio/timer_chime.mp3` — 3-note C-E-G ascending chime, ~2s, generated with numpy/ffmpeg.
-Loaded via `just_audio` asset source in `TimerService._playSound()`.
+3. Add corresponding entity/service in HA integration
