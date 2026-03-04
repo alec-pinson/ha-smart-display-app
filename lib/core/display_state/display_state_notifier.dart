@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,20 @@ import 'package:logger/logger.dart';
 import 'display_state.dart';
 import '../server/display_server.dart';
 
+class NotificationData {
+  final String title;
+  final String message;
+  final String? imageUrl;
+  final int duration;
+
+  const NotificationData({
+    required this.title,
+    required this.message,
+    this.imageUrl,
+    this.duration = 10,
+  });
+}
+
 final _log = Logger();
 const _platform = MethodChannel('ha_smart_display/system');
 
@@ -14,6 +30,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   final Ref _ref;
   Timer? _heartbeatTimer;
   final DateTime _startTime = DateTime.now();
+
+  final _notificationController = StreamController<NotificationData>.broadcast();
+  Stream<NotificationData> get notificationStream => _notificationController.stream;
 
   DisplayStateNotifier(this._ref)
       : super(const DisplayState(
@@ -74,6 +93,30 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         weather: WeatherData.fromJson(payload['weather'] as Map<String, dynamic>),
       );
     }
+    if (payload.containsKey('photos')) {
+      final photos = (payload['photos'] as List).cast<String>();
+      newState = newState.copyWith(photos: photos);
+    }
+    if (payload.containsKey('cameras')) {
+      final cameras = (payload['cameras'] as List).map((c) {
+        final bytes = base64Decode(c['data'] as String);
+        return CameraData(
+          id: c['id'] as String,
+          name: c['name'] as String,
+          imageBytes: Uint8List.fromList(bytes),
+        );
+      }).toList();
+      newState = newState.copyWith(cameras: cameras);
+    }
+    if (payload.containsKey('notification')) {
+      final n = payload['notification'] as Map<String, dynamic>;
+      _notificationController.add(NotificationData(
+        title: n['title'] as String? ?? '',
+        message: n['message'] as String? ?? '',
+        imageUrl: n['image_url'] as String?,
+        duration: (n['duration'] as num?)?.toInt() ?? 10,
+      ));
+    }
     if (payload.containsKey('timers')) {
       final timers = (payload['timers'] as List)
           .map((t) => TimerData.fromJson(t as Map<String, dynamic>))
@@ -131,6 +174,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   @override
   void dispose() {
     _heartbeatTimer?.cancel();
+    _notificationController.close();
     super.dispose();
   }
 }

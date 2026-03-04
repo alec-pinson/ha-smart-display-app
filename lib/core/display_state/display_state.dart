@@ -1,9 +1,45 @@
+import 'dart:typed_data';
+
+class ForecastPeriod {
+  final String datetime;
+  final double? temperature;
+  final String condition;
+  final int? precipitationProbability;
+
+  const ForecastPeriod({
+    required this.datetime,
+    this.temperature,
+    required this.condition,
+    this.precipitationProbability,
+  });
+
+  factory ForecastPeriod.fromJson(Map<String, dynamic> json) => ForecastPeriod(
+        datetime: json['datetime'] as String? ?? '',
+        temperature: (json['temperature'] as num?)?.toDouble(),
+        condition: json['condition'] as String? ?? 'unknown',
+        precipitationProbability: json['precipitation_probability'] as int?,
+      );
+}
+
+class CameraData {
+  final String id;
+  final String name;
+  final Uint8List imageBytes;
+
+  const CameraData({
+    required this.id,
+    required this.name,
+    required this.imageBytes,
+  });
+}
+
 class WeatherData {
   final String condition;
   final double? temperature;
   final String temperatureUnit;
   final int? humidity;
   final double? windSpeed;
+  final List<ForecastPeriod> forecast;
 
   const WeatherData({
     required this.condition,
@@ -11,6 +47,7 @@ class WeatherData {
     required this.temperatureUnit,
     this.humidity,
     this.windSpeed,
+    this.forecast = const [],
   });
 
   factory WeatherData.fromJson(Map<String, dynamic> json) => WeatherData(
@@ -19,6 +56,9 @@ class WeatherData {
         temperatureUnit: json['temperature_unit'] as String? ?? '°C',
         humidity: json['humidity'] as int?,
         windSpeed: (json['wind_speed'] as num?)?.toDouble(),
+        forecast: (json['forecast'] as List? ?? [])
+            .map((f) => ForecastPeriod.fromJson(f as Map<String, dynamic>))
+            .toList(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -85,6 +125,8 @@ class DisplayState {
   final WeatherData? weather;
   final List<TimerData> timers;
   final List<AlarmData> alarms;
+  final List<String> photos;
+  final List<CameraData> cameras;
 
   const DisplayState({
     required this.wakeWord,
@@ -98,6 +140,8 @@ class DisplayState {
     this.weather,
     this.timers = const [],
     this.alarms = const [],
+    this.photos = const [],
+    this.cameras = const [],
   });
 
   DisplayState copyWith({
@@ -112,6 +156,8 @@ class DisplayState {
     WeatherData? weather,
     List<TimerData>? timers,
     List<AlarmData>? alarms,
+    List<String>? photos,
+    List<CameraData>? cameras,
   }) {
     return DisplayState(
       wakeWord: wakeWord ?? this.wakeWord,
@@ -125,6 +171,8 @@ class DisplayState {
       weather: weather ?? this.weather,
       timers: timers ?? this.timers,
       alarms: alarms ?? this.alarms,
+      photos: photos ?? this.photos,
+      cameras: cameras ?? this.cameras,
     );
   }
 

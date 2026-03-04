@@ -11,6 +11,7 @@ import '../../core/timer/timer_service.dart';
 import '../../ui/widgets/connection_indicator.dart';
 import '../../ui/widgets/weather_icon.dart';
 
+
 class AmbientScreen extends ConsumerStatefulWidget {
   const AmbientScreen({super.key});
 
@@ -22,6 +23,7 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     with TickerProviderStateMixin {
   late AnimationController _auroraController;
   StreamSubscription? _alertSub;
+  StreamSubscription? _notificationSub;
 
   @override
   void initState() {
@@ -42,6 +44,12 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           _showFiringAlert(alert);
         }
       });
+
+      // Notification stream
+      final notifier = ref.read(displayStateProvider.notifier);
+      _notificationSub = notifier.notificationStream.listen((notification) {
+        if (mounted) _showNotification(notification);
+      });
     });
   }
 
@@ -54,10 +62,20 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     );
   }
 
+  void _showNotification(NotificationData notification) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.black38,
+      builder: (_) => _NotificationDialog(notification: notification),
+    );
+  }
+
   @override
   void dispose() {
     _auroraController.dispose();
     _alertSub?.cancel();
+    _notificationSub?.cancel();
     super.dispose();
   }
 
@@ -77,6 +95,12 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
             opacity: isAmbient ? 0.3 : 1.0,
             child: _AuroraBackground(controller: _auroraController),
           ),
+
+          // Photo slideshow — clock mode background when photos are configured
+          if (!isAmbient &&
+              displayState.ambientMode == 'clock' &&
+              displayState.photos.isNotEmpty)
+            _AmbientPhotoSlideshow(photos: displayState.photos),
 
           // Main content
           AnimatedSwitcher(
@@ -224,14 +248,24 @@ class _NormalOverlay extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isClockMode = state.ambientMode == 'clock';
     return Stack(
       children: [
-        // Clock + weather — top left
-        const Positioned(
-          top: 36,
-          left: 40,
-          child: _ClockWeatherPanel(),
+        // Mode content — always fills the screen so Stack never collapses
+        Positioned.fill(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 600),
+            child: _buildModeContent(state),
+          ),
         ),
+
+        // Clock + weather — only in clock mode
+        if (isClockMode)
+          const Positioned(
+            top: 36,
+            left: 40,
+            child: _ClockWeatherPanel(),
+          ),
 
         // Active timers — centre screen
         if (state.timers.isNotEmpty || state.alarms.isNotEmpty)
@@ -243,6 +277,23 @@ class _NormalOverlay extends ConsumerWidget {
           ),
       ],
     );
+  }
+
+  Widget _buildModeContent(DisplayState state) {
+    switch (state.ambientMode) {
+      case 'weather':
+        return _AmbientWeatherFull(
+          key: const ValueKey('weather'),
+          weather: state.weather,
+        );
+      case 'cameras':
+        return _AmbientCameraGrid(
+          key: const ValueKey('cameras'),
+          cameras: state.cameras,
+        );
+      default:
+        return const SizedBox.expand(key: ValueKey('clock'));
+    }
   }
 }
 
@@ -343,6 +394,431 @@ class _AmbientWeather extends StatelessWidget {
           style: const TextStyle(color: Colors.white38, fontSize: 18),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ambient mode: full-screen weather
+// ---------------------------------------------------------------------------
+
+class _AmbientWeatherFull extends StatelessWidget {
+  final WeatherData? weather;
+  const _AmbientWeatherFull({super.key, required this.weather});
+
+  @override
+  Widget build(BuildContext context) {
+    if (weather == null) return const SizedBox.shrink();
+    final w = weather!;
+    final forecast = _filterForecast(w.forecast);
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Main weather
+        WeatherIcon(condition: w.condition, size: 96),
+        const SizedBox(height: 16),
+        if (w.temperature != null)
+          Text(
+            '${w.temperature!.round()}${w.temperatureUnit}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 72,
+              fontWeight: FontWeight.w200,
+              height: 1,
+            ),
+          ),
+        const SizedBox(height: 8),
+        Text(
+          _capitalize(w.condition),
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.55),
+            fontSize: 22,
+            fontWeight: FontWeight.w300,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (w.humidity != null) ...[
+              Icon(Icons.water_drop_outlined, color: Colors.white38, size: 18),
+              const SizedBox(width: 4),
+              Text('${w.humidity}%',
+                  style: const TextStyle(color: Colors.white38, fontSize: 18)),
+              const SizedBox(width: 24),
+            ],
+            if (w.windSpeed != null) ...[
+              Icon(Icons.air_rounded, color: Colors.white38, size: 18),
+              const SizedBox(width: 4),
+              Text('${w.windSpeed!.round()} km/h',
+                  style: const TextStyle(color: Colors.white38, fontSize: 18)),
+            ],
+          ],
+        ),
+
+        // Hourly forecast row
+        if (forecast.isNotEmpty) ...[
+          const SizedBox(height: 32),
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 40),
+            color: Colors.white12,
+          ),
+          const SizedBox(height: 20),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Row(
+              children: [
+                for (int i = 0; i < forecast.length; i++) ...[
+                  _ForecastTile(period: forecast[i], unit: w.temperatureUnit),
+                  if (i < forecast.length - 1)
+                    Container(
+                      width: 1,
+                      height: 48,
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                      color: Colors.white12,
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Show every hour up to 12, then every 3 hours beyond that.
+  List<ForecastPeriod> _filterForecast(List<ForecastPeriod> forecast) {
+    if (forecast.length <= 12) return forecast;
+    final filtered = <ForecastPeriod>[];
+    for (final f in forecast) {
+      try {
+        final dt = DateTime.parse(f.datetime).toLocal();
+        if (filtered.length < 12 || dt.hour % 3 == 0) {
+          filtered.add(f);
+        }
+      } catch (_) {
+        filtered.add(f);
+      }
+    }
+    return filtered;
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).replaceAll('-', ' ');
+}
+
+class _ForecastTile extends StatelessWidget {
+  final ForecastPeriod period;
+  final String unit;
+  const _ForecastTile({required this.period, required this.unit});
+
+  @override
+  Widget build(BuildContext context) {
+    String timeLabel = '';
+    try {
+      final dt = DateTime.parse(period.datetime).toLocal();
+      timeLabel = DateFormat('HH:mm').format(dt);
+    } catch (_) {}
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          timeLabel,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.45),
+            fontSize: 13,
+            fontWeight: FontWeight.w300,
+          ),
+        ),
+        const SizedBox(height: 8),
+        WeatherIcon(condition: period.condition, size: 22),
+        const SizedBox(height: 8),
+        Text(
+          period.temperature != null
+              ? '${period.temperature!.round()}$unit'
+              : '—',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w300,
+          ),
+        ),
+        if (period.precipitationProbability != null &&
+            period.precipitationProbability! > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            '${period.precipitationProbability}%',
+            style: const TextStyle(
+              color: Color(0xFF64B5F6),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ambient mode: photo slideshow
+// ---------------------------------------------------------------------------
+
+class _AmbientPhotoSlideshow extends StatefulWidget {
+  final List<String> photos;
+  const _AmbientPhotoSlideshow({super.key, required this.photos});
+
+  @override
+  State<_AmbientPhotoSlideshow> createState() => _AmbientPhotoSlideshowState();
+}
+
+class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(_AmbientPhotoSlideshow old) {
+    super.didUpdateWidget(old);
+    if (old.photos != widget.photos) {
+      _index = 0;
+    }
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (widget.photos.isNotEmpty && mounted) {
+        setState(() => _index = (_index + 1) % widget.photos.length);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.photos.isEmpty) return const SizedBox.shrink();
+    final url = widget.photos[_index];
+    return AnimatedSwitcher(
+      duration: const Duration(seconds: 2),
+      child: Image.network(
+        url,
+        key: ValueKey(url),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ambient mode: camera grid
+// ---------------------------------------------------------------------------
+
+class _AmbientCameraGrid extends StatelessWidget {
+  final List<CameraData> cameras;
+  const _AmbientCameraGrid({super.key, required this.cameras});
+
+  @override
+  Widget build(BuildContext context) {
+    if (cameras.isEmpty) return const SizedBox.shrink();
+    const gap = 8.0;
+    const padding = 16.0;
+
+    // Build rows of up to 2 tiles each, all Expanded so they fill the screen
+    final rows = <Widget>[];
+    for (int i = 0; i < cameras.length; i += 2) {
+      final rowChildren = <Widget>[
+        Expanded(child: _CameraTile(camera: cameras[i])),
+        if (i + 1 < cameras.length) ...[
+          const SizedBox(width: gap),
+          Expanded(child: _CameraTile(camera: cameras[i + 1])),
+        ] else
+          const Expanded(child: SizedBox()),
+      ];
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: gap));
+      rows.add(Expanded(child: Row(children: rowChildren)));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(padding),
+      child: Column(children: rows),
+    );
+  }
+}
+
+class _CameraTile extends StatelessWidget {
+  final CameraData camera;
+  const _CameraTile({required this.camera});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.memory(camera.imageBytes, fit: BoxFit.cover),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black87, Colors.transparent],
+                ),
+              ),
+              child: Text(
+                camera.name,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Fallback shown when a mode has no data yet
+class _AmbientClockFallback extends StatelessWidget {
+  const _AmbientClockFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(child: _AmbientClock());
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Notification dialog
+// ---------------------------------------------------------------------------
+
+class _NotificationDialog extends StatefulWidget {
+  final NotificationData notification;
+  const _NotificationDialog({required this.notification});
+
+  @override
+  State<_NotificationDialog> createState() => _NotificationDialogState();
+}
+
+class _NotificationDialogState extends State<_NotificationDialog> {
+  Timer? _dismissTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _dismissTimer = Timer(
+      Duration(seconds: widget.notification.duration),
+      () {
+        if (mounted) Navigator.of(context).pop();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _dismissTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final n = widget.notification;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        constraints: const BoxConstraints(maxWidth: 480),
+        decoration: BoxDecoration(
+          color: const Color(0xFF161B22),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.6),
+              blurRadius: 40,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (n.imageUrl != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  n.imageUrl!,
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+            if (n.title.isNotEmpty)
+              Text(
+                n.title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            if (n.title.isNotEmpty && n.message.isNotEmpty)
+              const SizedBox(height: 8),
+            if (n.message.isNotEmpty)
+              Text(
+                n.message,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w300,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            const SizedBox(height: 24),
+            GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white12,
+                  borderRadius: BorderRadius.circular(50),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: const Text(
+                  'Dismiss',
+                  style: TextStyle(color: Colors.white70, fontSize: 15),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
