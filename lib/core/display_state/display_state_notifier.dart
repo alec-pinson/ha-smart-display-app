@@ -15,6 +15,7 @@ class NotificationData {
   final String? imageUrl;
   final int duration;
   final List<String> buttons;
+  final String style; // 'dialog' | 'toast' | 'banner'
 
   const NotificationData({
     required this.title,
@@ -22,6 +23,7 @@ class NotificationData {
     this.imageUrl,
     this.duration = 10,
     this.buttons = const [],
+    this.style = 'dialog',
   });
 }
 
@@ -137,6 +139,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         imageUrl: n['image_url'] as String?,
         duration: (n['duration'] as num?)?.toInt() ?? 10,
         buttons: (n['buttons'] as List?)?.cast<String>() ?? const [],
+        style: n['style'] as String? ?? 'dialog',
       ));
     }
     if (payload.containsKey('timers')) {

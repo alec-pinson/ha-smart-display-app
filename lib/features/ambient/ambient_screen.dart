@@ -64,12 +64,30 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
 
   void _showNotification(NotificationData notification) {
     final notifier = ref.read(displayStateProvider.notifier);
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black38,
-      builder: (_) => _NotificationDialog(notification: notification, notifier: notifier),
+    switch (notification.style) {
+      case 'toast':
+        _showOverlay((onDone) => _ToastOverlay(notification: notification, onDone: onDone));
+      case 'banner':
+        _showOverlay((onDone) => _BannerOverlay(notification: notification, notifier: notifier, onDone: onDone));
+      default:
+        showDialog(
+          context: context,
+          barrierDismissible: true,
+          barrierColor: Colors.black38,
+          builder: (_) => _NotificationDialog(notification: notification, notifier: notifier),
+        );
+    }
+  }
+
+  void _showOverlay(Widget Function(VoidCallback onDone) builder) {
+    OverlayEntry? entry;
+    entry = OverlayEntry(
+      builder: (_) => builder(() {
+        entry?.remove();
+        entry = null;
+      }),
     );
+    Overlay.of(context).insert(entry!);
   }
 
   @override
@@ -815,6 +833,239 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Toast notification — small pill at bottom, fades in/out
+// ---------------------------------------------------------------------------
+
+class _ToastOverlay extends StatefulWidget {
+  final NotificationData notification;
+  final VoidCallback onDone;
+  const _ToastOverlay({required this.notification, required this.onDone});
+
+  @override
+  State<_ToastOverlay> createState() => _ToastOverlayState();
+}
+
+class _ToastOverlayState extends State<_ToastOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _controller.forward();
+    Future.delayed(Duration(seconds: widget.notification.duration), () {
+      if (mounted) _controller.reverse().then((_) => widget.onDone());
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final n = widget.notification;
+    return Positioned(
+      bottom: 48,
+      left: 0,
+      right: 0,
+      child: FadeTransition(
+        opacity: _opacity,
+        child: GestureDetector(
+          onTap: () => _controller.reverse().then((_) => widget.onDone()),
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                constraints: const BoxConstraints(maxWidth: 560),
+                decoration: BoxDecoration(
+                  color: const Color(0xEE1E2530),
+                  borderRadius: BorderRadius.circular(50),
+                  border: Border.all(color: Colors.white12),
+                  boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 24)],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (n.title.isNotEmpty) ...[
+                      Text(
+                        n.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (n.message.isNotEmpty)
+                        const Text(
+                          '  ·  ',
+                          style: TextStyle(color: Colors.white38, fontSize: 16),
+                        ),
+                    ],
+                    if (n.message.isNotEmpty)
+                      Flexible(
+                        child: Text(
+                          n.message,
+                          style: const TextStyle(color: Colors.white70, fontSize: 16),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Banner notification — slides in from top
+// ---------------------------------------------------------------------------
+
+class _BannerOverlay extends StatefulWidget {
+  final NotificationData notification;
+  final DisplayStateNotifier notifier;
+  final VoidCallback onDone;
+  const _BannerOverlay({
+    required this.notification,
+    required this.notifier,
+    required this.onDone,
+  });
+
+  @override
+  State<_BannerOverlay> createState() => _BannerOverlayState();
+}
+
+class _BannerOverlayState extends State<_BannerOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _slide = Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller.forward();
+    Future.delayed(Duration(seconds: widget.notification.duration), _dismiss);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _dismiss() {
+    if (mounted) _controller.reverse().then((_) => widget.onDone());
+  }
+
+  void _onButton(String label, int index) {
+    widget.notifier.sendNotificationAction(label, index);
+    _dismiss();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final n = widget.notification;
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SlideTransition(
+        position: _slide,
+        child: GestureDetector(
+          onTap: n.buttons.isEmpty ? _dismiss : null,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(40, 20, 40, 20),
+              decoration: const BoxDecoration(
+                color: Color(0xEE161B22),
+                border: Border(bottom: BorderSide(color: Colors.white12)),
+                boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 24)],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (n.title.isNotEmpty)
+                          Text(
+                            n.title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        if (n.title.isNotEmpty && n.message.isNotEmpty)
+                          const SizedBox(height: 2),
+                        if (n.message.isNotEmpty)
+                          Text(
+                            n.message,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.65),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w300,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (n.buttons.isNotEmpty) ...[
+                    const SizedBox(width: 24),
+                    Wrap(
+                      spacing: 10,
+                      children: [
+                        for (int i = 0; i < n.buttons.length; i++)
+                          GestureDetector(
+                            onTap: () => _onButton(n.buttons[i], i),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.white12,
+                                borderRadius: BorderRadius.circular(50),
+                                border: Border.all(color: Colors.white24),
+                              ),
+                              child: Text(
+                                n.buttons[i],
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
