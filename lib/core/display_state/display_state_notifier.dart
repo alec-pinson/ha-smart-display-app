@@ -8,6 +8,7 @@ import 'package:logger/logger.dart';
 
 import 'display_state.dart';
 import '../server/display_server.dart';
+import '../timer/timer_service.dart';
 
 class NotificationData {
   final String title;
@@ -170,6 +171,15 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
           .map((a) => AlarmData.fromJson(a as Map<String, dynamic>))
           .toList();
       newState = newState.copyWith(alarms: alarms);
+    }
+    if (payload.containsKey('alarm_sounding')) {
+      final sounding = payload['alarm_sounding'] as bool;
+      final timerService = _ref.read(timerServiceProvider);
+      if (sounding) {
+        timerService.startHaAlarm();
+      } else {
+        timerService.stopHaAlarm();
+      }
     }
 
     state = newState;

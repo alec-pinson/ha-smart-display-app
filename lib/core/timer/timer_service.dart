@@ -13,7 +13,13 @@ class TimerService {
   final Ref _ref;
   final _firedTimers = <String>{};
   final _firedAlarms = <String>{};
-  final _player = AudioPlayer();
+
+  // Player for timer/alarm chime — loops until dismissed
+  final _chimePlayer = AudioPlayer();
+
+  // Player for HA-triggered alarm — independent loop
+  final _haAlarmPlayer = AudioPlayer();
+
   Timer? _checkTimer;
 
   final _firingController = StreamController<FiringAlert?>.broadcast();
@@ -49,15 +55,16 @@ class TimerService {
   Future<void> _fire(FiringAlert alert) async {
     _log.i('TimerService: firing ${alert.type.name} "${alert.label}"');
     if (!_firingController.isClosed) _firingController.add(alert);
-    await _playSound();
+    await _startChimeLoop();
   }
 
-  Future<void> _playSound() async {
+  Future<void> _startChimeLoop() async {
     try {
-      await _player.setAsset('assets/audio/timer_chime.mp3');
-      await _player.play();
+      await _chimePlayer.setLoopMode(LoopMode.one);
+      await _chimePlayer.setAsset('assets/audio/timer_chime.mp3');
+      await _chimePlayer.play();
     } catch (e) {
-      _log.w('TimerService: could not play sound: $e');
+      _log.w('TimerService: could not play chime: $e');
     }
   }
 
@@ -69,13 +76,32 @@ class TimerService {
     } else {
       notifier.dismissAlarm(alert.id);
     }
-    _player.stop();
+    _chimePlayer.stop();
+  }
+
+  /// Called by HA alarm_sounding switch turning ON
+  Future<void> startHaAlarm() async {
+    try {
+      await _haAlarmPlayer.setLoopMode(LoopMode.one);
+      await _haAlarmPlayer.setAsset('assets/audio/timer_chime.mp3');
+      await _haAlarmPlayer.play();
+      _log.i('TimerService: HA alarm started');
+    } catch (e) {
+      _log.w('TimerService: could not start HA alarm: $e');
+    }
+  }
+
+  /// Called by HA alarm_sounding switch turning OFF
+  void stopHaAlarm() {
+    _haAlarmPlayer.stop();
+    _log.i('TimerService: HA alarm stopped');
   }
 
   void dispose() {
     _checkTimer?.cancel();
     _firingController.close();
-    _player.dispose();
+    _chimePlayer.dispose();
+    _haAlarmPlayer.dispose();
   }
 }
 
