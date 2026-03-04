@@ -260,21 +260,18 @@ class _NormalOverlay extends ConsumerWidget {
           ),
         ),
 
-        // Clock + weather — only in clock mode
+        // Clock + weather + alarms — only in clock mode
         if (isClockMode)
-          const Positioned(
+          Positioned(
             top: 36,
             left: 40,
-            child: _ClockWeatherPanel(),
+            child: _ClockWeatherPanel(alarms: state.alarms),
           ),
 
         // Active timers — centre screen
-        if (state.timers.isNotEmpty || state.alarms.isNotEmpty)
+        if (state.timers.isNotEmpty)
           Center(
-            child: _TimerPanel(
-              timers: state.timers,
-              alarms: state.alarms,
-            ),
+            child: _TimerPanel(timers: state.timers),
           ),
       ],
     );
@@ -916,8 +913,8 @@ class _NotificationDialogState extends State<_NotificationDialog> {
                   ),
                   textAlign: TextAlign.center,
                 ),
-              const SizedBox(height: 24),
-              if (hasButtons)
+              if (hasButtons) ...[
+                const SizedBox(height: 24),
                 Wrap(
                   spacing: 12,
                   runSpacing: 12,
@@ -940,23 +937,8 @@ class _NotificationDialogState extends State<_NotificationDialog> {
                         ),
                       ),
                   ],
-                )
-              else
-                GestureDetector(
-                  onTap: _dismiss,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white12,
-                      borderRadius: BorderRadius.circular(50),
-                      border: Border.all(color: Colors.white24),
-                    ),
-                    child: const Text(
-                      'Dismiss',
-                      style: TextStyle(color: Colors.white70, fontSize: 15),
-                    ),
-                  ),
                 ),
+              ],
             ],
           ),
         ),
@@ -970,7 +952,8 @@ class _NotificationDialogState extends State<_NotificationDialog> {
 // ---------------------------------------------------------------------------
 
 class _ClockWeatherPanel extends StatefulWidget {
-  const _ClockWeatherPanel();
+  final List<AlarmData> alarms;
+  const _ClockWeatherPanel({this.alarms = const []});
 
   @override
   State<_ClockWeatherPanel> createState() => _ClockWeatherPanelState();
@@ -1000,6 +983,7 @@ class _ClockWeatherPanelState extends State<_ClockWeatherPanel> {
     return Consumer(
       builder: (context, ref, _) {
         final weather = ref.watch(displayStateProvider).weather;
+        final alarms = widget.alarms;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1054,6 +1038,12 @@ class _ClockWeatherPanelState extends State<_ClockWeatherPanel> {
                 ],
               ],
             ),
+
+            // Alarms — inline below date, no card
+            if (alarms.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ...alarms.map((a) => _InlineAlarm(alarm: a)),
+            ],
           ],
         );
       },
@@ -1070,18 +1060,14 @@ class _ClockWeatherPanelState extends State<_ClockWeatherPanel> {
 
 class _TimerPanel extends ConsumerWidget {
   final List<TimerData> timers;
-  final List<AlarmData> alarms;
 
-  const _TimerPanel({required this.timers, required this.alarms});
+  const _TimerPanel({required this.timers});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        ...timers.map((t) => _TimerCard(timer: t)),
-        ...alarms.map((a) => _AlarmCard(alarm: a)),
-      ],
+      children: timers.map((t) => _TimerCard(timer: t)).toList(),
     );
   }
 }
@@ -1152,7 +1138,7 @@ class _TimerCardState extends ConsumerState<_TimerCard> {
               widget.timer.label,
               style: TextStyle(
                 color: Colors.white.withOpacity(0.6),
-                fontSize: 16,
+                fontSize: 20,
                 letterSpacing: 1.5,
                 fontWeight: FontWeight.w400,
               ),
@@ -1164,7 +1150,7 @@ class _TimerCardState extends ConsumerState<_TimerCard> {
                 color: isUrgent
                     ? const Color(0xFFFF6B6B)
                     : Colors.white,
-                fontSize: 72,
+                fontSize: 96,
                 fontWeight: FontWeight.w200,
                 letterSpacing: -1,
                 height: 1,
@@ -1176,9 +1162,50 @@ class _TimerCardState extends ConsumerState<_TimerCard> {
               'Tap to dismiss',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.25),
-                fontSize: 12,
+                fontSize: 14,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineAlarm extends ConsumerWidget {
+  final AlarmData alarm;
+  const _InlineAlarm({required this.alarm});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      onTap: () => ref.read(displayStateProvider.notifier).dismissAlarm(alarm.id),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.alarm_rounded, color: Colors.white.withOpacity(0.45), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              alarm.time,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.7),
+                fontSize: 20,
+                fontWeight: FontWeight.w300,
+              ),
+            ),
+            if (alarm.label.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Text(
+                alarm.label,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.4),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w300,
+                ),
+              ),
+            ],
           ],
         ),
       ),

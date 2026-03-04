@@ -81,11 +81,22 @@ class TimerData {
     required this.endsAt,
   });
 
-  factory TimerData.fromJson(Map<String, dynamic> json) => TimerData(
-        id: json['id'] as String,
-        label: json['label'] as String? ?? 'Timer',
-        endsAt: json['ends_at'] as int,
-      );
+  factory TimerData.fromJson(Map<String, dynamic> json) {
+    // Compute ends_at locally from duration_seconds so network round-trip
+    // delay doesn't inflate the displayed time.
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final int endsAt;
+    if (json.containsKey('duration_seconds')) {
+      endsAt = now + (json['duration_seconds'] as int);
+    } else {
+      endsAt = json['ends_at'] as int;
+    }
+    return TimerData(
+      id: json['id'] as String,
+      label: json['label'] as String? ?? 'Timer',
+      endsAt: endsAt,
+    );
+  }
 
   Duration get remaining {
     final secs = endsAt - DateTime.now().millisecondsSinceEpoch ~/ 1000;
