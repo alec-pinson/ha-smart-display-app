@@ -24,6 +24,7 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
   late AnimationController _auroraController;
   StreamSubscription? _alertSub;
   StreamSubscription? _notificationSub;
+  StreamSubscription? _openCameraSub;
 
   @override
   void initState() {
@@ -49,6 +50,17 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
       final notifier = ref.read(displayStateProvider.notifier);
       _notificationSub = notifier.notificationStream.listen((notification) {
         if (mounted) _showNotification(notification);
+      });
+
+      // Open camera stream (triggered by HA service call)
+      _openCameraSub = notifier.openCameraStream.listen((camera) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierColor: Colors.black,
+            builder: (_) => _CameraFullScreen(initialCamera: camera, notifier: notifier),
+          ).then((_) => notifier.setFocusedCamera(null));
+        }
       });
     });
   }
@@ -95,6 +107,7 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     _auroraController.dispose();
     _alertSub?.cancel();
     _notificationSub?.cancel();
+    _openCameraSub?.cancel();
     super.dispose();
   }
 
@@ -800,11 +813,16 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.memory(
-              _current.imageBytes,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-            ),
+            if (_current.imageBytes.isNotEmpty)
+              Image.memory(
+                _current.imageBytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              )
+            else
+              const Center(
+                child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 1.5),
+              ),
             // Camera name bottom-left
             Positioned(
               bottom: 24,
@@ -1107,6 +1125,14 @@ class _NotificationDialogState extends State<_NotificationDialog> {
 
   void _dismiss() => Navigator.of(context).pop();
 
+  void _onTap() {
+    final tapAction = widget.notification.tapAction;
+    if (tapAction != null && tapAction.isNotEmpty) {
+      widget.notifier.sendNotificationAction(tapAction, -1);
+    }
+    _dismiss();
+  }
+
   void _onButton(String label, int index) {
     widget.notifier.sendNotificationAction(label, index);
     _dismiss();
@@ -1116,6 +1142,7 @@ class _NotificationDialogState extends State<_NotificationDialog> {
   Widget build(BuildContext context) {
     final n = widget.notification;
     final hasButtons = n.buttons.isNotEmpty;
+    final hasTapAction = n.tapAction != null && n.tapAction!.isNotEmpty;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -1123,13 +1150,17 @@ class _NotificationDialogState extends State<_NotificationDialog> {
         key: const ValueKey('notification'),
         direction: DismissDirection.horizontal,
         onDismissed: (_) => _dismiss(),
-        child: Container(
-          padding: const EdgeInsets.all(32),
-          constraints: const BoxConstraints(maxWidth: 480),
+        child: GestureDetector(
+          onTap: hasTapAction ? _onTap : null,
+          child: Container(
+          padding: EdgeInsets.all(n.imageUrl != null ? 0 : 32),
+          constraints: BoxConstraints(maxWidth: n.imageUrl != null ? 680 : 480),
           decoration: BoxDecoration(
             color: const Color(0xFF161B22),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white24),
+            border: Border.all(
+              color: hasTapAction ? Colors.white38 : Colors.white24,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.6),
@@ -1142,67 +1173,78 @@ class _NotificationDialogState extends State<_NotificationDialog> {
             children: [
               if (n.imageUrl != null) ...[
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                   child: Image.network(
                     n.imageUrl!,
-                    height: 180,
+                    height: 300,
                     width: double.infinity,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                   ),
                 ),
-                const SizedBox(height: 20),
-              ],
-              if (n.title.isNotEmpty)
-                Text(
-                  n.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              if (n.title.isNotEmpty && n.message.isNotEmpty)
-                const SizedBox(height: 8),
-              if (n.message.isNotEmpty)
-                Text(
-                  n.message,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w300,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              if (hasButtons) ...[
                 const SizedBox(height: 24),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  alignment: WrapAlignment.center,
+              ],
+              Padding(
+                padding: n.imageUrl != null
+                    ? const EdgeInsets.fromLTRB(32, 0, 32, 32)
+                    : EdgeInsets.zero,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (int i = 0; i < n.buttons.length; i++)
-                      GestureDetector(
-                        onTap: () => _onButton(n.buttons[i], i),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white12,
-                            borderRadius: BorderRadius.circular(50),
-                            border: Border.all(color: Colors.white24),
-                          ),
-                          child: Text(
-                            n.buttons[i],
-                            style: const TextStyle(color: Colors.white, fontSize: 15),
-                          ),
+                    if (n.title.isNotEmpty)
+                      Text(
+                        n.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w500,
                         ),
+                        textAlign: TextAlign.center,
                       ),
+                    if (n.title.isNotEmpty && n.message.isNotEmpty)
+                      const SizedBox(height: 8),
+                    if (n.message.isNotEmpty)
+                      Text(
+                        n.message,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w300,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    if (hasButtons) ...[
+                      const SizedBox(height: 24),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          for (int i = 0; i < n.buttons.length; i++)
+                            GestureDetector(
+                              onTap: () => _onButton(n.buttons[i], i),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white12,
+                                  borderRadius: BorderRadius.circular(50),
+                                  border: Border.all(color: Colors.white24),
+                                ),
+                                child: Text(
+                                  n.buttons[i],
+                                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
-              ],
+              ),
             ],
           ),
+        ),
         ),
       ),
     );

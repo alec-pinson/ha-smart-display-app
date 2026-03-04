@@ -16,6 +16,7 @@ class NotificationData {
   final int duration;
   final List<String> buttons;
   final String style; // 'dialog' | 'toast' | 'banner'
+  final String? tapAction;
 
   const NotificationData({
     required this.title,
@@ -24,6 +25,7 @@ class NotificationData {
     this.duration = 10,
     this.buttons = const [],
     this.style = 'dialog',
+    this.tapAction,
   });
 }
 
@@ -42,6 +44,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
 
   final _focusedCameraController = StreamController<CameraData>.broadcast();
   Stream<CameraData> get focusedCameraStream => _focusedCameraController.stream;
+
+  final _openCameraController = StreamController<CameraData>.broadcast();
+  Stream<CameraData> get openCameraStream => _openCameraController.stream;
 
   void setFocusedCamera(String? id) {
     _focusedCamera = id;
@@ -122,6 +127,17 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       }).toList();
       newState = newState.copyWith(cameras: cameras);
     }
+    if (payload.containsKey('open_camera')) {
+      final c = payload['open_camera'] as Map<String, dynamic>;
+      final id = c['id'] as String;
+      final name = c['name'] as String;
+      setFocusedCamera(id);
+      _openCameraController.add(CameraData(
+        id: id,
+        name: name,
+        imageBytes: Uint8List(0),
+      ));
+    }
     if (payload.containsKey('focused_camera_data')) {
       final c = payload['focused_camera_data'] as Map<String, dynamic>;
       final bytes = base64Decode(c['data'] as String);
@@ -140,6 +156,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         duration: (n['duration'] as num?)?.toInt() ?? 10,
         buttons: (n['buttons'] as List?)?.cast<String>() ?? const [],
         style: n['style'] as String? ?? 'dialog',
+        tapAction: n['tap_action'] as String?,
       ));
     }
     if (payload.containsKey('timers')) {
@@ -209,6 +226,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _heartbeatTimer?.cancel();
     _notificationController.close();
     _focusedCameraController.close();
+    _openCameraController.close();
     super.dispose();
   }
 }
