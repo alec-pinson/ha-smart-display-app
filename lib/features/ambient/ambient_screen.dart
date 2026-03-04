@@ -92,6 +92,16 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
             right: 24,
             child: ConnectionIndicator(),
           ),
+
+          // Screen off overlay — always in tree so AnimatedOpacity can fade
+          IgnorePointer(
+            ignoring: displayState.screenOn,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 500),
+              opacity: displayState.screenOn ? 0.0 : 1.0,
+              child: Container(color: Colors.black),
+            ),
+          ),
         ],
       ),
     );
@@ -287,15 +297,30 @@ class _AmbientClockState extends State<_AmbientClock> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      DateFormat('HH:mm').format(_now),
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 80,
-        fontWeight: FontWeight.w200,
-        letterSpacing: -1,
-        height: 1,
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          DateFormat('HH:mm').format(_now),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 80,
+            fontWeight: FontWeight.w200,
+            letterSpacing: -1,
+            height: 1,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          DateFormat('EEEE, d MMMM').format(_now),
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.4),
+            fontSize: 18,
+            fontWeight: FontWeight.w300,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
     );
   }
 }
