@@ -162,6 +162,16 @@ class DisplayServer {
     }
   }
 
+  void sendEvent(Map<String, dynamic> event) {
+    if (_clients.isEmpty) return;
+    final msg = jsonEncode({'type': 'event', ...event});
+    for (final client in List.of(_clients)) {
+      try {
+        client.sink.add(msg);
+      } catch (_) {}
+    }
+  }
+
   void _send(WebSocketChannel ws, Map<String, dynamic> msg) {
     ws.sink.add(jsonEncode(msg));
   }

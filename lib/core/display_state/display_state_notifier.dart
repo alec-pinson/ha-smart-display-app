@@ -14,12 +14,14 @@ class NotificationData {
   final String message;
   final String? imageUrl;
   final int duration;
+  final List<String> buttons;
 
   const NotificationData({
     required this.title,
     required this.message,
     this.imageUrl,
     this.duration = 10,
+    this.buttons = const [],
   });
 }
 
@@ -134,6 +136,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         message: n['message'] as String? ?? '',
         imageUrl: n['image_url'] as String?,
         duration: (n['duration'] as num?)?.toInt() ?? 10,
+        buttons: (n['buttons'] as List?)?.cast<String>() ?? const [],
       ));
     }
     if (payload.containsKey('timers')) {
@@ -166,6 +169,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     final newAlarms = state.alarms.where((a) => a.id != alarmId).toList();
     state = state.copyWith(alarms: newAlarms);
     _ref.read(displayServerProvider).broadcastState(state, dismissedAlarm: alarmId, focusedCamera: _focusedCamera);
+  }
+
+  void sendNotificationAction(String button, int index) {
+    _ref.read(displayServerProvider).sendEvent({
+      'event': 'notification_action',
+      'button': button,
+      'index': index,
+    });
   }
 
   void recordWakeWordDetection() {
