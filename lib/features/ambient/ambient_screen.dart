@@ -100,8 +100,19 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           // Photo slideshow — clock mode background when photos are configured
           if (!isAmbient &&
               displayState.ambientMode == 'clock' &&
-              displayState.photos.isNotEmpty)
+              displayState.photos.isNotEmpty) ...[
             _AmbientPhotoSlideshow(photos: displayState.photos),
+            // Dark scrim so clock/text stays readable over photos
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xAA000000), Color(0x66000000)],
+                ),
+              ),
+            ),
+          ],
 
           // Main content
           AnimatedSwitcher(
@@ -1115,12 +1126,12 @@ class _TimerCardState extends ConsumerState<_TimerCard> {
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.07),
+          color: Colors.white.withOpacity(0.12),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isUrgent
-                ? const Color(0xFFFF6B6B).withOpacity(0.6)
-                : Colors.white.withOpacity(0.12),
+                ? const Color(0xFFFF6B6B).withOpacity(0.8)
+                : Colors.white.withOpacity(0.2),
             width: 1,
           ),
           boxShadow: [
@@ -1150,7 +1161,7 @@ class _TimerCardState extends ConsumerState<_TimerCard> {
                 color: isUrgent
                     ? const Color(0xFFFF6B6B)
                     : Colors.white,
-                fontSize: 96,
+                fontSize: 120,
                 fontWeight: FontWeight.w200,
                 letterSpacing: -1,
                 height: 1,

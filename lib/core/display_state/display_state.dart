@@ -82,12 +82,12 @@ class TimerData {
   });
 
   factory TimerData.fromJson(Map<String, dynamic> json) {
-    // Compute ends_at locally from duration_seconds so network round-trip
-    // delay doesn't inflate the displayed time.
+    // Prefer remaining_seconds (sent by integration to avoid clock drift
+    // and correctly handle reconnect). Fall back to ends_at absolute timestamp.
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final int endsAt;
-    if (json.containsKey('duration_seconds')) {
-      endsAt = now + (json['duration_seconds'] as int);
+    if (json.containsKey('remaining_seconds')) {
+      endsAt = now + (json['remaining_seconds'] as int);
     } else {
       endsAt = json['ends_at'] as int;
     }
@@ -117,11 +117,16 @@ class AlarmData {
     required this.time,
   });
 
-  factory AlarmData.fromJson(Map<String, dynamic> json) => AlarmData(
-        id: json['id'] as String,
-        label: json['label'] as String? ?? 'Alarm',
-        time: json['time'] as String,
-      );
+  factory AlarmData.fromJson(Map<String, dynamic> json) {
+    // Strip seconds if time is "HH:MM:SS" (HA time selector sends this format)
+    final raw = json['time'] as String;
+    final time = raw.length > 5 ? raw.substring(0, 5) : raw;
+    return AlarmData(
+      id: json['id'] as String,
+      label: json['label'] as String? ?? 'Alarm',
+      time: time,
+    );
+  }
 }
 
 class DisplayState {
