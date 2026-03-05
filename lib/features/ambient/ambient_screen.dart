@@ -890,7 +890,8 @@ class _ClimateChip extends StatelessWidget {
             size: 18,
             color: Colors.white54,
           ),
-          const SizedBox(width: 8),
+          if (climate.currentTemperature != null || climate.humidity != null)
+            const SizedBox(width: 8),
           if (climate.currentTemperature != null) ...[
             Text(
               '${climate.currentTemperature!.toStringAsFixed(1)}${climate.unit}',
@@ -1003,7 +1004,11 @@ class _ClimateControlDialogState extends State<_ClimateControlDialog> {
             // Header
             Row(
               children: [
-                Icon(_hvacIcon(_hvacMode), color: Colors.white54, size: 22),
+                Icon(
+                  climate.hvacModes.isEmpty ? Icons.thermostat : _hvacIcon(_hvacMode),
+                  color: Colors.white54,
+                  size: 22,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -1092,7 +1097,7 @@ class _ClimateControlDialogState extends State<_ClimateControlDialog> {
                   ),
                   const SizedBox(width: 20),
                   Text(
-                    '${_targetTemp % 1 == 0 ? _targetTemp.toInt() : _targetTemp.toStringAsFixed(1)}${climate.unit}',
+                    '${_targetTemp.round() == _targetTemp ? _targetTemp.round() : _targetTemp.toStringAsFixed(1)}${climate.unit}',
                     style: TextStyle(
                       color: _hvacMode == 'off' ? Colors.white24 : Colors.white,
                       fontSize: 42,
