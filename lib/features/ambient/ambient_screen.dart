@@ -1071,40 +1071,37 @@ class _ClimateControlDialogState extends State<_ClimateControlDialog> {
                   ),
               ],
             ),
-            const SizedBox(height: 32),
-
-            // Target temperature
-            Text(
-              'Target Temperature',
-              style: TextStyle(color: Colors.white38, fontSize: 13, letterSpacing: 0.5),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _TempButton(
-                  icon: Icons.remove,
-                  onPressed: _hvacMode == 'off' ? null : () => _adjustTemp(-_step),
-                ),
-                const SizedBox(width: 20),
-                Text(
-                  '${_targetTemp % 1 == 0 ? _targetTemp.toInt() : _targetTemp.toStringAsFixed(1)}${climate.unit}',
-                  style: TextStyle(
-                    color: _hvacMode == 'off' ? Colors.white24 : Colors.white,
-                    fontSize: 42,
-                    fontWeight: FontWeight.w200,
-                  ),
-                ),
-                const SizedBox(width: 20),
-                _TempButton(
-                  icon: Icons.add,
-                  onPressed: _hvacMode == 'off' ? null : () => _adjustTemp(_step),
-                ),
-              ],
-            ),
-
-            // HVAC modes
+            // Target temperature + HVAC controls — only if controllable
             if (climate.hvacModes.isNotEmpty) ...[
+              const SizedBox(height: 32),
+              Text(
+                'Target Temperature',
+                style: TextStyle(color: Colors.white38, fontSize: 13, letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _TempButton(
+                    icon: Icons.remove,
+                    onPressed: _hvacMode == 'off' ? null : () => _adjustTemp(-_step),
+                  ),
+                  const SizedBox(width: 20),
+                  Text(
+                    '${_targetTemp % 1 == 0 ? _targetTemp.toInt() : _targetTemp.toStringAsFixed(1)}${climate.unit}',
+                    style: TextStyle(
+                      color: _hvacMode == 'off' ? Colors.white24 : Colors.white,
+                      fontSize: 42,
+                      fontWeight: FontWeight.w200,
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  _TempButton(
+                    icon: Icons.add,
+                    onPressed: _hvacMode == 'off' ? null : () => _adjustTemp(_step),
+                  ),
+                ],
+              ),
               const SizedBox(height: 28),
               Wrap(
                 spacing: 8,
