@@ -100,6 +100,16 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     );
   }
 
+  Alignment _notificationAlignment(String position) => switch (position) {
+    'top_left'      => Alignment.topLeft,
+    'top_center'    => Alignment.topCenter,
+    'top_right'     => Alignment.topRight,
+    'bottom_left'   => Alignment.bottomLeft,
+    'bottom_center' => Alignment.bottomCenter,
+    'bottom_right'  => Alignment.bottomRight,
+    _               => Alignment.center,
+  };
+
   void _showNotification(NotificationData notification) {
     final notifier = ref.read(displayStateProvider.notifier);
     switch (notification.style) {
@@ -118,7 +128,11 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           context: context,
           barrierDismissible: true,
           barrierColor: Colors.black38,
-          builder: (_) => _NotificationDialog(notification: notification, notifier: notifier),
+          builder: (_) => _NotificationDialog(
+            notification: notification,
+            notifier: notifier,
+            alignment: _notificationAlignment(notification.position),
+          ),
         );
         _currentNotificationRoute = route;
         Navigator.of(context).push(route).then((_) {
@@ -1162,7 +1176,8 @@ class _BannerOverlayState extends State<_BannerOverlay>
 class _NotificationDialog extends StatefulWidget {
   final NotificationData notification;
   final DisplayStateNotifier notifier;
-  const _NotificationDialog({required this.notification, required this.notifier});
+  final Alignment alignment;
+  const _NotificationDialog({required this.notification, required this.notifier, this.alignment = Alignment.center});
 
   @override
   State<_NotificationDialog> createState() => _NotificationDialogState();
@@ -1211,6 +1226,7 @@ class _NotificationDialogState extends State<_NotificationDialog> {
 
     return Dialog(
       backgroundColor: Colors.transparent,
+      alignment: widget.alignment,
       child: Dismissible(
         key: const ValueKey('notification'),
         direction: DismissDirection.horizontal,

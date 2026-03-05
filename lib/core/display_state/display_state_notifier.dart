@@ -18,6 +18,7 @@ class NotificationData {
   final List<String> buttons;
   final String style; // 'dialog' | 'toast' | 'banner'
   final String? tapAction;
+  final String position; // 'center' | 'top_left' | 'top_center' | 'top_right' | 'bottom_left' | 'bottom_center' | 'bottom_right'
 
   const NotificationData({
     required this.title,
@@ -27,6 +28,7 @@ class NotificationData {
     this.buttons = const [],
     this.style = 'dialog',
     this.tapAction,
+    this.position = 'center',
   });
 }
 
@@ -158,6 +160,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         buttons: (n['buttons'] as List?)?.cast<String>() ?? const [],
         style: n['style'] as String? ?? 'dialog',
         tapAction: n['tap_action'] as String?,
+        position: n['position'] as String? ?? 'center',
       ));
     }
     if (payload.containsKey('timers')) {
