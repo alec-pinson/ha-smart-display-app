@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/device/device_id_service.dart';
 import '../../core/display_state/display_state.dart';
 import '../../core/display_state/display_state_notifier.dart';
+import '../../core/server/display_server.dart';
 import '../../core/timer/timer_service.dart';
 import '../../ui/widgets/connection_indicator.dart';
 import '../../ui/widgets/weather_icon.dart';
@@ -78,6 +81,14 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     if (await Permission.microphone.isDenied) {
       await Permission.microphone.request();
     }
+  }
+
+  void _showStatusDialog() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => const _StatusDialog(),
+    );
   }
 
   void _showFiringAlert(FiringAlert alert) {
@@ -156,36 +167,60 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           ),
 
           // Photo slideshow — clock mode background when photos are configured
-          if (!isAmbient &&
-              displayState.ambientMode == 'clock' &&
-              displayState.photos.isNotEmpty) ...[
-            _AmbientPhotoSlideshow(photos: displayState.photos),
+          if (displayState.ambientMode == 'clock' && displayState.photos.isNotEmpty) ...[
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 800),
+              opacity: isAmbient ? 0.0 : 1.0,
+              child: _AmbientPhotoSlideshow(photos: displayState.photos),
+            ),
             // Dark scrim so clock/text stays readable over photos
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xAA000000), Color(0x66000000)],
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 800),
+              opacity: isAmbient ? 0.0 : 1.0,
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xAA000000), Color(0x66000000)],
+                  ),
                 ),
               ),
             ),
           ],
 
-          // Main content
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 800),
-            child: isAmbient
-                ? _AmbientOverlay(key: const ValueKey('ambient'), state: displayState)
-                : _NormalOverlay(key: const ValueKey('normal'), state: displayState),
+          // Main content — crossfade between normal and ambient
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: isAmbient,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 800),
+                opacity: isAmbient ? 0.0 : 1.0,
+                child: _NormalOverlay(state: displayState),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !isAmbient,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 800),
+                opacity: isAmbient ? 1.0 : 0.0,
+                child: _AmbientOverlay(state: displayState),
+              ),
+            ),
           ),
 
-          // Connection indicator — top right always
-          const Positioned(
-            top: 20,
-            right: 24,
-            child: ConnectionIndicator(),
-          ),
+          // Connection indicator — top right, hidden in ambient mode
+          if (!isAmbient)
+            Positioned(
+              top: 20,
+              right: 24,
+              child: GestureDetector(
+                onTap: () => _showStatusDialog(),
+                child: const ConnectionIndicator(),
+              ),
+            ),
 
           // Screen off overlay — always in tree so AnimatedOpacity can fade
           IgnorePointer(
@@ -1672,6 +1707,236 @@ class _AlertDialog extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Status dialog — tapping the connection dot opens this
+// ---------------------------------------------------------------------------
+
+class _StatusDialog extends ConsumerStatefulWidget {
+  const _StatusDialog();
+
+  @override
+  ConsumerState<_StatusDialog> createState() => _StatusDialogState();
+}
+
+class _StatusDialogState extends ConsumerState<_StatusDialog> {
+  String? _ipAddress;
+  String? _deviceId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAsync();
+  }
+
+  Future<void> _loadAsync() async {
+    final ip = await _getLocalIp();
+    final id = await ref.read(deviceIdProvider.future);
+    if (mounted) setState(() { _ipAddress = ip; _deviceId = id; });
+  }
+
+  Future<String> _getLocalIp() async {
+    try {
+      final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      // Prefer wlan/en (WiFi) interfaces
+      for (final iface in interfaces) {
+        if (iface.name.startsWith('wlan') || iface.name.startsWith('en')) {
+          for (final addr in iface.addresses) {
+            if (!addr.isLoopback) return addr.address;
+          }
+        }
+      }
+      // Fallback: any non-loopback IPv4
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          if (!addr.isLoopback) return addr.address;
+        }
+      }
+    } catch (_) {}
+    return 'Unknown';
+  }
+
+  String _formatUptime(int seconds) {
+    final d = seconds ~/ 86400;
+    final h = (seconds % 86400) ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final s = seconds % 60;
+    if (d > 0) return '${d}d ${h}h ${m}m';
+    if (h > 0) return '${h}h ${m}m ${s}s';
+    return '${m}m ${s}s';
+  }
+
+  String _formatLastSeen(DateTime? lastSeen) {
+    if (lastSeen == null) return 'Never';
+    final diff = DateTime.now().difference(lastSeen);
+    if (diff.inSeconds < 5) return 'Just now';
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(displayStateProvider);
+    final server = ref.read(displayServerProvider);
+    final clientCount = server.clientCount;
+    final lastSeen = server.lastStateReceived;
+
+    final connState = clientCount == 0
+        ? _ConnStatus.disconnected
+        : (lastSeen == null || DateTime.now().difference(lastSeen).inSeconds > 90)
+            ? _ConnStatus.stale
+            : _ConnStatus.connected;
+
+    return Dialog(
+      backgroundColor: const Color(0xFF161B22),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 400,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  const Icon(Icons.monitor_heart_outlined, color: Color(0xFF58A6FF), size: 20),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Device Status',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: const Icon(Icons.close, color: Color(0xFF8B949E), size: 20),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const _SectionLabel('Home Assistant'),
+              _StatusRow(
+                icon: Icons.circle,
+                iconColor: switch (connState) {
+                  _ConnStatus.connected => const Color(0xFF3FB950),
+                  _ConnStatus.stale => const Color(0xFFD29922),
+                  _ConnStatus.disconnected => const Color(0xFF484F58),
+                },
+                label: 'Connection',
+                value: switch (connState) {
+                  _ConnStatus.connected => 'Connected',
+                  _ConnStatus.stale => 'Degraded',
+                  _ConnStatus.disconnected => 'Disconnected',
+                },
+              ),
+              _StatusRow(
+                icon: Icons.access_time,
+                label: 'Last message',
+                value: _formatLastSeen(lastSeen),
+              ),
+              _StatusRow(
+                icon: Icons.devices,
+                label: 'HA clients',
+                value: '$clientCount',
+              ),
+              const SizedBox(height: 16),
+              const _SectionLabel('Network'),
+              _StatusRow(
+                icon: Icons.wifi,
+                label: 'IP address',
+                value: _ipAddress ?? '…',
+              ),
+              _StatusRow(
+                icon: Icons.lan_outlined,
+                label: 'WS port',
+                value: '8472',
+              ),
+              const SizedBox(height: 16),
+              const _SectionLabel('Device'),
+              _StatusRow(
+                icon: Icons.fingerprint,
+                label: 'Device ID',
+                value: _deviceId ?? '…',
+              ),
+              _StatusRow(
+                icon: Icons.timer_outlined,
+                label: 'Uptime',
+                value: _formatUptime(state.uptimeSeconds),
+              ),
+              _StatusRow(
+                icon: Icons.mic_outlined,
+                label: 'Wake words detected',
+                value: '${state.wakeWordCount}',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _ConnStatus { connected, stale, disconnected }
+
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  const _SectionLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text.toUpperCase(),
+        style: const TextStyle(
+          color: Color(0xFF8B949E),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusRow extends StatelessWidget {
+  final IconData icon;
+  final Color? iconColor;
+  final String label;
+  final String value;
+
+  const _StatusRow({
+    required this.icon,
+    this.iconColor,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(icon, color: iconColor ?? const Color(0xFF8B949E), size: 14),
+          const SizedBox(width: 10),
+          Text(label, style: const TextStyle(color: Color(0xFF8B949E), fontSize: 13)),
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }
