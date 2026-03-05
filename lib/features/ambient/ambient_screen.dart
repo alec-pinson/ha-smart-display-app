@@ -441,7 +441,7 @@ class _AmbientOverlay extends StatelessWidget {
         children: [
           _AmbientClock(),
           if (state.weather != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
             _AmbientWeather(weather: state.weather!),
           ],
         ],
@@ -483,18 +483,18 @@ class _AmbientClockState extends State<_AmbientClock> {
           DateFormat('HH:mm').format(_now),
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 80,
+            fontSize: 140,
             fontWeight: FontWeight.w200,
-            letterSpacing: -1,
+            letterSpacing: -2,
             height: 1,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
         Text(
           DateFormat('EEEE, d MMMM').format(_now),
           style: TextStyle(
             color: Colors.white.withOpacity(0.4),
-            fontSize: 18,
+            fontSize: 34,
             fontWeight: FontWeight.w300,
             letterSpacing: 0.5,
           ),
@@ -513,13 +513,13 @@ class _AmbientWeather extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        WeatherIcon(condition: weather.condition, size: 18, color: Colors.white38),
-        const SizedBox(width: 6),
+        WeatherIcon(condition: weather.condition, size: 34, color: Colors.white38),
+        const SizedBox(width: 10),
         Text(
           weather.temperature != null
               ? '${weather.temperature!.round()}${weather.temperatureUnit}'
               : weather.condition,
-          style: const TextStyle(color: Colors.white38, fontSize: 18),
+          style: const TextStyle(color: Colors.white38, fontSize: 34),
         ),
       ],
     );
