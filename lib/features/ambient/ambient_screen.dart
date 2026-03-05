@@ -885,7 +885,11 @@ class _ClimateChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(_hvacIcon(climate.hvacMode), size: 18, color: Colors.white54),
+          Icon(
+            climate.hvacModes.isEmpty ? Icons.thermostat : _hvacIcon(climate.hvacMode),
+            size: 18,
+            color: Colors.white54,
+          ),
           const SizedBox(width: 8),
           if (climate.currentTemperature != null) ...[
             Text(
