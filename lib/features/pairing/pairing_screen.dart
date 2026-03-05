@@ -13,23 +13,6 @@ class PairingScreen extends ConsumerStatefulWidget {
 }
 
 class _PairingScreenState extends ConsumerState<PairingScreen> {
-  Timer? _tickTimer;
-  int _secondsRemaining = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _tickTimer?.cancel();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final pairing = ref.watch(pairingProvider);

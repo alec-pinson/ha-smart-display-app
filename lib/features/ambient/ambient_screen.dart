@@ -1934,53 +1934,6 @@ class _InlineAlarm extends ConsumerWidget {
   }
 }
 
-class _AlarmCard extends ConsumerWidget {
-  final AlarmData alarm;
-  const _AlarmCard({required this.alarm});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      onTap: () => ref.read(displayStateProvider.notifier).dismissAlarm(alarm.id),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.12)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.alarm_rounded,
-                color: Colors.white.withOpacity(0.6), size: 24),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  alarm.label,
-                  style: TextStyle(
-                      color: Colors.white.withOpacity(0.6), fontSize: 14),
-                ),
-                Text(
-                  alarm.time,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.w200,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Firing alert dialog (timer/alarm expired)
 // ---------------------------------------------------------------------------

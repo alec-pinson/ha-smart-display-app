@@ -18,6 +18,7 @@ class _ConnectionIndicatorState extends ConsumerState<ConnectionIndicator>
     with SingleTickerProviderStateMixin {
   ConnectionState _state = ConnectionState.disconnected;
   StreamSubscription? _sub;
+  Timer? _pollTimer;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
 
@@ -42,7 +43,7 @@ class _ConnectionIndicatorState extends ConsumerState<ConnectionIndicator>
     });
 
     // Poll for stale detection every 15s
-    Timer.periodic(const Duration(seconds: 15), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) {
         _updateState(
           ref.read(displayServerProvider).clientCount,
@@ -68,6 +69,7 @@ class _ConnectionIndicatorState extends ConsumerState<ConnectionIndicator>
   @override
   void dispose() {
     _sub?.cancel();
+    _pollTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
