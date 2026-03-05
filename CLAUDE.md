@@ -48,17 +48,21 @@ HA sends open_camera → openCameraStream fires → _CameraFullScreen dialog sho
 
 User presses notification button → DisplayStateNotifier.sendNotificationAction()
   → DisplayServer.sendEvent({event: notification_action, button, index}) → HA event fired
+
+User adjusts thermostat → DisplayStateNotifier.setClimateTemperature(temp) / setClimateHvacMode(mode)
+  → DisplayServer.sendEvent({event: climate_set_temperature/climate_set_hvac_mode, ...}) → HA calls climate service
 ```
 
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `photos`, `cameras`, `timers`, `alarms`                 |
+| `DisplayState`  | all state fields incl. `photos`, `cameras`, `timers`, `alarms`, `climate`      |
 | `WeatherData`   | `condition`, `temperature`, `temperatureUnit`, `humidity`, `windSpeed`, `forecast` |
 | `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability`             |
 | `CameraData`    | `id`, `name`, `imageBytes` (Uint8List)                                         |
 | `TimerData`     | `id`, `label`, `endsAt` (uses `remaining_seconds` from HA if present)          |
 | `AlarmData`     | `id`, `label`, `time` (HH:MM — seconds stripped from HA time selector output)  |
+| `ClimateData`   | `name`, `currentTemperature`, `humidity`, `targetTemperature`, `hvacMode`, `hvacModes`, `minTemp`, `maxTemp`, `unit` |
 
 ## Streams exposed by DisplayStateNotifier
 | Stream                | Type              | Purpose                                            |
