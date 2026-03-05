@@ -67,6 +67,18 @@ User presses notification button → DisplayStateNotifier.sendNotificationAction
 | `focusedCameraStream` | `CameraData`      | Live camera frames for full-screen view            |
 | `openCameraStream`    | `CameraData`      | HA-triggered open_camera command (empty imageBytes)|
 
+## NotificationData fields
+| Field       | Type           | Default    | Notes                                                        |
+| ----------- | -------------- | ---------- | ------------------------------------------------------------ |
+| `title`     | String         | required   |                                                              |
+| `message`   | String         | required   |                                                              |
+| `imageUrl`  | String?        | null       |                                                              |
+| `duration`  | int            | 10         | seconds before auto-dismiss                                  |
+| `buttons`   | List\<String\> | []         | fires `notification_action` event on press                   |
+| `style`     | String         | 'dialog'   | dialog / toast / banner                                      |
+| `tapAction` | String?        | null       | dialog tap fires `notification_action` with index -1         |
+| `position`  | String         | 'center'   | dialog alignment: center / top_left / top_center / top_right / bottom_left / bottom_center / bottom_right |
+
 ## Audio (TimerService)
 Two independent `AudioPlayer` instances:
 - `_chimePlayer` — fires when a timer/alarm expires on-device; loops until user dismisses the alert
@@ -79,8 +91,18 @@ Uses `window.attributes.screenBrightness` (Android `WindowManager.LayoutParams`)
 app window brightness directly. No `WRITE_SETTINGS` permission needed.
 
 ## Permissions
-`permission_handler` package requests `RECORD_AUDIO` at first launch (via post-frame callback
-in `AmbientScreen.initState`). Needed for future wake-word detection feature.
+`permission_handler` package requests `RECORD_AUDIO` at first launch via post-frame callback
+in `AmbientScreen.initState` (NOT in `main()` — the Activity isn't ready to show system
+dialogs before `runApp`). Needed for future wake-word detection feature.
+
+## Connection indicator + status dialog
+Dot in top-right, hidden in ambient mode. Tap opens `_StatusDialog` showing: HA connection
+state, last message timestamp, client count, local IP (from `NetworkInterface.list()`), WS
+port, device ID (from `deviceIdProvider`), uptime, wake word count.
+
+## Ambient ↔ normal crossfade
+Two `AnimatedOpacity` + `IgnorePointer` pairs — both overlays always in tree, opacity
+crossfades over 800ms. `AnimatedSwitcher` was dropped (unreliable with full-screen children).
 
 ## Adding a new command key
 1. Add field to `DisplayState` + `copyWith()` + `toJson()`
