@@ -33,6 +33,42 @@ class CameraData {
   });
 }
 
+class ClimateData {
+  final String name;
+  final double? currentTemperature;
+  final int? humidity;
+  final double? targetTemperature;
+  final String hvacMode;
+  final List<String> hvacModes;
+  final double minTemp;
+  final double maxTemp;
+  final String unit;
+
+  const ClimateData({
+    required this.name,
+    this.currentTemperature,
+    this.humidity,
+    this.targetTemperature,
+    required this.hvacMode,
+    required this.hvacModes,
+    required this.minTemp,
+    required this.maxTemp,
+    required this.unit,
+  });
+
+  factory ClimateData.fromJson(Map<String, dynamic> json) => ClimateData(
+        name: json['name'] as String? ?? 'Climate',
+        currentTemperature: (json['current_temperature'] as num?)?.toDouble(),
+        humidity: json['humidity'] as int?,
+        targetTemperature: (json['target_temperature'] as num?)?.toDouble(),
+        hvacMode: json['hvac_mode'] as String? ?? 'off',
+        hvacModes: (json['hvac_modes'] as List?)?.cast<String>() ?? const ['off'],
+        minTemp: (json['min_temp'] as num?)?.toDouble() ?? 7.0,
+        maxTemp: (json['max_temp'] as num?)?.toDouble() ?? 35.0,
+        unit: json['unit'] as String? ?? '°C',
+      );
+}
+
 class WeatherData {
   final String condition;
   final double? temperature;
@@ -139,6 +175,7 @@ class DisplayState {
   final int uptimeSeconds;
   final int wakeWordCount;
   final WeatherData? weather;
+  final ClimateData? climate;
   final List<TimerData> timers;
   final List<AlarmData> alarms;
   final List<String> photos;
@@ -154,6 +191,7 @@ class DisplayState {
     required this.uptimeSeconds,
     required this.wakeWordCount,
     this.weather,
+    this.climate,
     this.timers = const [],
     this.alarms = const [],
     this.photos = const [],
@@ -170,6 +208,7 @@ class DisplayState {
     int? uptimeSeconds,
     int? wakeWordCount,
     WeatherData? weather,
+    ClimateData? climate,
     List<TimerData>? timers,
     List<AlarmData>? alarms,
     List<String>? photos,
@@ -185,6 +224,7 @@ class DisplayState {
       uptimeSeconds: uptimeSeconds ?? this.uptimeSeconds,
       wakeWordCount: wakeWordCount ?? this.wakeWordCount,
       weather: weather ?? this.weather,
+      climate: climate ?? this.climate,
       timers: timers ?? this.timers,
       alarms: alarms ?? this.alarms,
       photos: photos ?? this.photos,

@@ -115,6 +115,11 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         weather: WeatherData.fromJson(payload['weather'] as Map<String, dynamic>),
       );
     }
+    if (payload.containsKey('climate')) {
+      newState = newState.copyWith(
+        climate: ClimateData.fromJson(payload['climate'] as Map<String, dynamic>),
+      );
+    }
     if (payload.containsKey('photos')) {
       final photos = (payload['photos'] as List).cast<String>();
       newState = newState.copyWith(photos: photos);
@@ -209,6 +214,20 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       'event': 'notification_action',
       'button': button,
       'index': index,
+    });
+  }
+
+  void setClimateTemperature(double temperature) {
+    _ref.read(displayServerProvider).sendEvent({
+      'event': 'climate_set_temperature',
+      'temperature': temperature,
+    });
+  }
+
+  void setClimateHvacMode(String hvacMode) {
+    _ref.read(displayServerProvider).sendEvent({
+      'event': 'climate_set_hvac_mode',
+      'hvac_mode': hvacMode,
     });
   }
 

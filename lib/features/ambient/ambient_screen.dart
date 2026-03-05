@@ -386,6 +386,23 @@ class _NormalOverlay extends ConsumerWidget {
             child: _ClockWeatherPanel(alarms: state.alarms),
           ),
 
+        // Climate chip — bottom-right in clock mode
+        if (isClockMode && state.climate != null)
+          Positioned(
+            bottom: 32,
+            right: 32,
+            child: GestureDetector(
+              onTap: () => showDialog(
+                context: context,
+                builder: (_) => _ClimateControlDialog(
+                  climate: state.climate!,
+                  notifier: ref.read(displayStateProvider.notifier),
+                ),
+              ),
+              child: _ClimateChip(climate: state.climate!),
+            ),
+          ),
+
         // Active timers — centre screen
         if (state.timers.isNotEmpty)
           Center(
@@ -845,6 +862,319 @@ class _AmbientClockFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(child: _AmbientClock());
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Climate chip — bottom-right of clock screen
+// ---------------------------------------------------------------------------
+
+class _ClimateChip extends StatelessWidget {
+  final ClimateData climate;
+  const _ClimateChip({required this.climate});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(50),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_hvacIcon(climate.hvacMode), size: 18, color: Colors.white54),
+          const SizedBox(width: 8),
+          if (climate.currentTemperature != null) ...[
+            Text(
+              '${climate.currentTemperature!.toStringAsFixed(1)}${climate.unit}',
+              style: const TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w300),
+            ),
+          ],
+          if (climate.humidity != null) ...[
+            const SizedBox(width: 12),
+            Icon(Icons.water_drop_outlined, size: 16, color: Colors.white38),
+            const SizedBox(width: 4),
+            Text(
+              '${climate.humidity}%',
+              style: const TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w300),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+IconData _hvacIcon(String mode) {
+  switch (mode) {
+    case 'heat': return Icons.local_fire_department_outlined;
+    case 'cool': return Icons.ac_unit;
+    case 'heat_cool': return Icons.device_thermostat;
+    case 'fan_only': return Icons.air;
+    case 'dry': return Icons.water_drop_outlined;
+    case 'auto': return Icons.autorenew;
+    case 'off': return Icons.power_settings_new;
+    default: return Icons.thermostat;
+  }
+}
+
+String _hvacLabel(String mode) {
+  switch (mode) {
+    case 'heat': return 'Heat';
+    case 'cool': return 'Cool';
+    case 'heat_cool': return 'Heat/Cool';
+    case 'fan_only': return 'Fan';
+    case 'dry': return 'Dry';
+    case 'auto': return 'Auto';
+    case 'off': return 'Off';
+    default: return mode;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Climate control dialog
+// ---------------------------------------------------------------------------
+
+class _ClimateControlDialog extends StatefulWidget {
+  final ClimateData climate;
+  final DisplayStateNotifier notifier;
+  const _ClimateControlDialog({required this.climate, required this.notifier});
+
+  @override
+  State<_ClimateControlDialog> createState() => _ClimateControlDialogState();
+}
+
+class _ClimateControlDialogState extends State<_ClimateControlDialog> {
+  late double _targetTemp;
+  late String _hvacMode;
+  Timer? _debounce;
+
+  double get _step => widget.climate.unit == '°F' ? 1.0 : 0.5;
+
+  @override
+  void initState() {
+    super.initState();
+    _targetTemp = widget.climate.targetTemperature ?? 20.0;
+    _hvacMode = widget.climate.hvacMode;
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _adjustTemp(double delta) {
+    setState(() {
+      _targetTemp = (_targetTemp + delta)
+          .clamp(widget.climate.minTemp, widget.climate.maxTemp);
+      // Round to nearest step
+      _targetTemp = (_targetTemp / _step).round() * _step;
+    });
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 600), () {
+      widget.notifier.setClimateTemperature(_targetTemp);
+    });
+  }
+
+  void _setHvacMode(String mode) {
+    setState(() => _hvacMode = mode);
+    widget.notifier.setClimateHvacMode(mode);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final climate = widget.climate;
+    return Dialog(
+      backgroundColor: const Color(0xFF111827),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Row(
+              children: [
+                Icon(_hvacIcon(_hvacMode), color: Colors.white54, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    climate.name,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white38, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Current temp + humidity
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (climate.currentTemperature != null)
+                  Column(
+                    children: [
+                      Text(
+                        '${climate.currentTemperature!.toStringAsFixed(1)}${climate.unit}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 52,
+                          fontWeight: FontWeight.w200,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Current',
+                        style: TextStyle(color: Colors.white38, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                if (climate.currentTemperature != null && climate.humidity != null)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 28),
+                    width: 1,
+                    height: 48,
+                    color: Colors.white12,
+                  ),
+                if (climate.humidity != null)
+                  Column(
+                    children: [
+                      Text(
+                        '${climate.humidity}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 52,
+                          fontWeight: FontWeight.w200,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Humidity',
+                        style: TextStyle(color: Colors.white38, fontSize: 13),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // Target temperature
+            Text(
+              'Target Temperature',
+              style: TextStyle(color: Colors.white38, fontSize: 13, letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _TempButton(
+                  icon: Icons.remove,
+                  onPressed: _hvacMode == 'off' ? null : () => _adjustTemp(-_step),
+                ),
+                const SizedBox(width: 20),
+                Text(
+                  '${_targetTemp % 1 == 0 ? _targetTemp.toInt() : _targetTemp.toStringAsFixed(1)}${climate.unit}',
+                  style: TextStyle(
+                    color: _hvacMode == 'off' ? Colors.white24 : Colors.white,
+                    fontSize: 42,
+                    fontWeight: FontWeight.w200,
+                  ),
+                ),
+                const SizedBox(width: 20),
+                _TempButton(
+                  icon: Icons.add,
+                  onPressed: _hvacMode == 'off' ? null : () => _adjustTemp(_step),
+                ),
+              ],
+            ),
+
+            // HVAC modes
+            if (climate.hvacModes.isNotEmpty) ...[
+              const SizedBox(height: 28),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: climate.hvacModes.map((mode) {
+                  final selected = _hvacMode == mode;
+                  return GestureDetector(
+                    onTap: () => _setHvacMode(mode),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: selected ? Colors.white.withOpacity(0.15) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(50),
+                        border: Border.all(
+                          color: selected ? Colors.white38 : Colors.white12,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _hvacIcon(mode),
+                            size: 16,
+                            color: selected ? Colors.white70 : Colors.white30,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _hvacLabel(mode),
+                            style: TextStyle(
+                              color: selected ? Colors.white70 : Colors.white30,
+                              fontSize: 14,
+                              fontWeight: selected ? FontWeight.w400 : FontWeight.w300,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TempButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+  const _TempButton({required this.icon, this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: onPressed != null ? Colors.white.withOpacity(0.1) : Colors.transparent,
+          border: Border.all(color: onPressed != null ? Colors.white24 : Colors.white12),
+        ),
+        child: Icon(icon, color: onPressed != null ? Colors.white60 : Colors.white24, size: 22),
+      ),
+    );
   }
 }
 
