@@ -171,6 +171,7 @@ class DisplayState {
   final String ambientMode;
   final bool ambientActive;
   final int brightness;
+  final bool autoBrightness;
   final int volume; // 0–100
   final bool doNotDisturb;
   final bool screenOn;
@@ -189,6 +190,7 @@ class DisplayState {
     required this.ambientMode,
     required this.ambientActive,
     required this.brightness,
+    this.autoBrightness = false,
     this.volume = 50,
     required this.doNotDisturb,
     required this.screenOn,
@@ -208,6 +210,7 @@ class DisplayState {
     String? ambientMode,
     bool? ambientActive,
     int? brightness,
+    bool? autoBrightness,
     int? volume,
     bool? doNotDisturb,
     bool? screenOn,
@@ -226,6 +229,7 @@ class DisplayState {
       ambientMode: ambientMode ?? this.ambientMode,
       ambientActive: ambientActive ?? this.ambientActive,
       brightness: brightness ?? this.brightness,
+      autoBrightness: autoBrightness ?? this.autoBrightness,
       volume: volume ?? this.volume,
       doNotDisturb: doNotDisturb ?? this.doNotDisturb,
       screenOn: screenOn ?? this.screenOn,
@@ -246,6 +250,7 @@ class DisplayState {
         'ambient_mode': ambientMode,
         'ambient_active': ambientActive,
         'brightness': brightness,
+        'auto_brightness': autoBrightness,
         'volume': volume,
         'do_not_disturb': doNotDisturb,
         'screen_on': screenOn,

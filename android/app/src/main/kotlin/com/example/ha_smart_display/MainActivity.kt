@@ -25,10 +25,12 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "setBrightness" -> {
-                        // Minimum usable value is 10/255 ≈ 0.039 — below this Android
-                        // falls back to system/automatic brightness unexpectedly
-                        val brightness = (call.argument<Double>("brightness") ?: 0.5)
-                            .coerceIn(10.0 / 255.0, 1.0).toFloat()
+                        // Negative value means auto brightness (BRIGHTNESS_OVERRIDE_NONE = -1f).
+                        // Minimum usable positive value is 10/255 ≈ 0.039 — below this Android
+                        // falls back to system/automatic brightness unexpectedly.
+                        val raw = call.argument<Double>("brightness") ?: 0.5
+                        val brightness = if (raw < 0) -1f
+                            else raw.coerceIn(10.0 / 255.0, 1.0).toFloat()
                         try {
                             val lp = window.attributes
                             lp.screenBrightness = brightness

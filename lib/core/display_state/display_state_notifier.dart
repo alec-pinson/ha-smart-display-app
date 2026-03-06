@@ -133,10 +133,19 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     if (payload.containsKey('ambient_active')) {
       newState = newState.copyWith(ambientActive: payload['ambient_active'] as bool);
     }
+    if (payload.containsKey('auto_brightness')) {
+      final auto = payload['auto_brightness'] as bool;
+      newState = newState.copyWith(autoBrightness: auto);
+      if (auto) {
+        _applyBrightness(-1); // -1 signals auto to native layer
+      } else {
+        _applyBrightness(newState.brightness);
+      }
+    }
     if (payload.containsKey('brightness')) {
       final b = payload['brightness'] as int;
       newState = newState.copyWith(brightness: b);
-      _applyBrightness(b);
+      if (!newState.autoBrightness) _applyBrightness(b);
     }
     if (payload.containsKey('volume')) {
       final v = payload['volume'] as int;
@@ -297,10 +306,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
 
   Future<void> _applyBrightness(int value) async {
     try {
-      await _platform.invokeMethod(
-        'setBrightness',
-        {'brightness': value.clamp(0, 255) / 255.0},
-      );
+      // value < 0 is the sentinel for auto brightness (maps to -1f in native layer)
+      final brightness = value < 0 ? -1.0 : value.clamp(0, 255) / 255.0;
+      await _platform.invokeMethod('setBrightness', {'brightness': brightness});
     } catch (e) {
       _log.w('Brightness: could not set: $e');
     }
