@@ -59,9 +59,10 @@ class VoiceAssistantService {
     });
   }
 
-  void onResponseReceived({String? ttsUrl}) {
+  Future<void> onResponseReceived({String? ttsUrl}) async {
+    // Play TTS before resuming wake word — avoids the TTS audio re-triggering detection
     if (ttsUrl != null && ttsUrl.isNotEmpty) {
-      _playTts(ttsUrl);
+      await _playTts(ttsUrl);
     }
     if (_state == VoiceAssistantState.processing) _resetToIdle();
   }

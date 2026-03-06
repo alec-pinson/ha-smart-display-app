@@ -224,7 +224,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
           style: 'banner',
         ));
       }
-      _ref.read(voiceAssistantServiceProvider).onResponseReceived(ttsUrl: ttsUrl);
+      unawaited(_ref.read(voiceAssistantServiceProvider).onResponseReceived(ttsUrl: ttsUrl));
     }
 
     state = newState;
