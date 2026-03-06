@@ -267,11 +267,15 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           // Connection indicator — top right, hidden in ambient mode
           if (!isAmbient)
             Positioned(
-              top: 20,
-              right: 24,
+              top: 4,
+              right: 8,
               child: GestureDetector(
                 onTap: () => _showStatusDialog(),
-                child: const ConnectionIndicator(),
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: ConnectionIndicator(),
+                ),
               ),
             ),
 
@@ -2281,7 +2285,7 @@ class _StatusDialogState extends ConsumerState<_StatusDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 400,
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
