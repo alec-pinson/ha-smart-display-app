@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
 
 import 'display_state.dart';
+import '../camera_analysis/camera_analysis_service.dart';
 import '../server/display_server.dart';
 import '../timer/timer_service.dart';
 import '../voice/voice_assistant_service.dart';
@@ -296,6 +297,12 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   void recordWakeWordDetection() {
     state = state.copyWith(wakeWordCount: state.wakeWordCount + 1);
     _pushState();
+  }
+
+  /// Called by CameraAnalysisService when a new lux reading arrives from the light sensor.
+  void updateLux(double? lux) {
+    state = state.copyWith(lux: lux);
+    // Lux updates are sent on the next 30s heartbeat; no immediate push needed.
   }
 
   void pushInitialState() => _pushState();

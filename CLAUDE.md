@@ -29,6 +29,7 @@ adb -s G0918309042301JB install -r build/app/outputs/flutter-apk/app-debug.apk
 | `timerServiceProvider`       | `core/timer/timer_service.dart`                  | Provider<TimerService> — expiry watcher + audio                     |
 | `wakeWordServiceProvider`    | `core/wake_word/wake_word_service.dart`          | Provider<WakeWordService> — native wake word pipeline; detectionStream |
 | `voiceAssistantServiceProvider` | `core/voice/voice_assistant_service.dart`     | Provider<VoiceAssistantService> — record + VAD + send to HA        |
+| `cameraAnalysisServiceProvider` | `core/camera_analysis/camera_analysis_service.dart` | Provider<CameraAnalysisService> — reads hardware lux sensor via CameraAnalysisPlugin |
 
 ## State flow
 ```
@@ -58,7 +59,7 @@ User adjusts thermostat → DisplayStateNotifier.setClimateTemperature(temp) / s
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `photos`, `cameras`, `timers`, `alarms`, `climate` |
+| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate` |
 | `WeatherData`   | `condition`, `temperature`, `temperatureUnit`, `humidity`, `windSpeed`, `forecast` |
 | `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability`             |
 | `CameraData`    | `id`, `name`, `imageBytes` (Uint8List)                                         |
@@ -103,9 +104,10 @@ consistently across the codebase. Keys stored: `device_id`, `paired`, `pairing_c
 the `ProviderContainer` is created, and injected via `displayStateProvider.overrideWith()`.
 
 ## Permissions
-`permission_handler` package requests `RECORD_AUDIO` at first launch via post-frame callback
-in `AmbientScreen.initState` (NOT in `main()` — the Activity isn't ready to show system
-dialogs before `runApp`).
+`permission_handler` requests `RECORD_AUDIO` and `CAMERA` at first launch via post-frame
+callback in `AmbientScreen.initState` (NOT in `main()` — the Activity isn't ready to show
+system dialogs before `runApp`). Camera analysis `start()` is called only after the permissions
+future resolves, so the light sensor never races with the permission dialog.
 
 ## Connection indicator + status dialog
 Dot in top-right, hidden in ambient mode. Tap opens `_StatusDialog` showing: HA connection

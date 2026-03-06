@@ -13,6 +13,7 @@ import '../../core/display_state/display_state_notifier.dart';
 import '../../core/server/display_server.dart';
 import '../../core/timer/timer_service.dart';
 import '../../core/voice/voice_assistant_service.dart';
+import '../../core/camera_analysis/camera_analysis_service.dart';
 import '../../core/wake_word/wake_word_service.dart';
 import '../../ui/widgets/connection_indicator.dart';
 import '../../ui/widgets/weather_icon.dart';
@@ -54,10 +55,6 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Request microphone permission for wake-word detection.
-      // Done here (post-frame) so the Activity is fully ready to show the dialog.
-      _requestPermissions();
-
       ref.read(displayStateProvider.notifier).pushInitialState();
 
       // Initialise timer service
@@ -72,6 +69,13 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
       final notifier = ref.read(displayStateProvider.notifier);
       _notificationSub = notifier.notificationStream.listen((notification) {
         if (mounted) _showNotification(notification);
+      });
+
+      // Request permissions then start camera analysis once granted.
+      // Microphone and camera both requested here (post-frame so the Activity
+      // is ready to show system dialogs).
+      _requestPermissions().then((_) {
+        if (mounted) ref.read(cameraAnalysisServiceProvider).start();
       });
 
       // Initialise wake word service (starts listening immediately)
@@ -113,9 +117,11 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
   }
 
   Future<void> _requestPermissions() async {
-    // Microphone — needed for wake-word detection ("Hey Jarvis" etc.)
     if (await Permission.microphone.isDenied) {
       await Permission.microphone.request();
+    }
+    if (await Permission.camera.isDenied) {
+      await Permission.camera.request();
     }
   }
 

@@ -177,6 +177,7 @@ class DisplayState {
   final bool screenOn;
   final int uptimeSeconds;
   final int wakeWordCount;
+  final double? lux; // null until first light sensor reading
   final WeatherData? weather;
   final ClimateData? climate;
   final List<TimerData> timers;
@@ -196,6 +197,7 @@ class DisplayState {
     required this.screenOn,
     required this.uptimeSeconds,
     required this.wakeWordCount,
+    this.lux,
     this.weather,
     this.climate,
     this.timers = const [],
@@ -216,6 +218,7 @@ class DisplayState {
     bool? screenOn,
     int? uptimeSeconds,
     int? wakeWordCount,
+    double? lux,
     WeatherData? weather,
     ClimateData? climate,
     List<TimerData>? timers,
@@ -235,6 +238,7 @@ class DisplayState {
       screenOn: screenOn ?? this.screenOn,
       uptimeSeconds: uptimeSeconds ?? this.uptimeSeconds,
       wakeWordCount: wakeWordCount ?? this.wakeWordCount,
+      lux: lux ?? this.lux,
       weather: weather ?? this.weather,
       climate: climate ?? this.climate,
       timers: timers ?? this.timers,
@@ -256,5 +260,6 @@ class DisplayState {
         'screen_on': screenOn,
         'uptime_seconds': uptimeSeconds,
         'wake_word_count': wakeWordCount,
+        if (lux != null) 'lux': double.parse(lux!.toStringAsFixed(1)),
       };
 }

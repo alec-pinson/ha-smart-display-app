@@ -19,6 +19,9 @@ class MainActivity : FlutterActivity() {
         // Register wake word plugin
         flutterEngine.plugins.add(WakeWordPlugin())
 
+        // Register camera analysis plugin (lux + motion detection)
+        flutterEngine.plugins.add(CameraAnalysisPlugin())
+
         // System channel — brightness + volume control
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, systemChannel)
