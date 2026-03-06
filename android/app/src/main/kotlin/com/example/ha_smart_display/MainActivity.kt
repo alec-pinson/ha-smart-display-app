@@ -1,5 +1,7 @@
 package com.example.ha_smart_display
 
+import android.content.Context
+import android.media.AudioManager
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -17,13 +19,16 @@ class MainActivity : FlutterActivity() {
         // Register wake word plugin
         flutterEngine.plugins.add(WakeWordPlugin())
 
-        // System channel — brightness control
+        // System channel — brightness + volume control
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, systemChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "setBrightness" -> {
+                        // Minimum usable value is 10/255 ≈ 0.039 — below this Android
+                        // falls back to system/automatic brightness unexpectedly
                         val brightness = (call.argument<Double>("brightness") ?: 0.5)
-                            .coerceIn(0.0, 1.0).toFloat()
+                            .coerceIn(10.0 / 255.0, 1.0).toFloat()
                         try {
                             val lp = window.attributes
                             lp.screenBrightness = brightness
@@ -32,6 +37,19 @@ class MainActivity : FlutterActivity() {
                         } catch (e: Exception) {
                             result.error("BRIGHTNESS_ERROR", e.message, null)
                         }
+                    }
+                    "setVolume" -> {
+                        val pct = (call.argument<Int>("volume") ?: 50).coerceIn(0, 100)
+                        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                        val index = (pct / 100.0 * max).toInt().coerceIn(0, max)
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, index, 0)
+                        result.success(null)
+                    }
+                    "getVolume" -> {
+                        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                        val pct = if (max > 0) (current * 100.0 / max).toInt() else 0
+                        result.success(pct)
                     }
                     else -> result.notImplemented()
                 }

@@ -25,6 +25,16 @@ Future<String> loadPersistedWakeWordSensitivity() async {
   return await _storage.read(key: _wakeWordSensitivityKey) ?? 'medium';
 }
 
+Future<int> loadInitialVolume() async {
+  try {
+    final vol = await const MethodChannel('ha_smart_display/system')
+        .invokeMethod<int>('getVolume');
+    return vol ?? 50;
+  } catch (_) {
+    return 50;
+  }
+}
+
 class NotificationData {
   final String title;
   final String message;
@@ -71,13 +81,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _pushState();
   }
 
-  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium'})
+  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', int initialVolume = 50})
       : super(DisplayState(
           wakeWord: initialWakeWord,
           wakeWordSensitivity: initialWakeWordSensitivity,
           ambientMode: 'clock',
           ambientActive: false,
           brightness: 128,
+          volume: initialVolume,
           doNotDisturb: false,
           screenOn: true,
           uptimeSeconds: 0,
@@ -126,6 +137,11 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       final b = payload['brightness'] as int;
       newState = newState.copyWith(brightness: b);
       _applyBrightness(b);
+    }
+    if (payload.containsKey('volume')) {
+      final v = payload['volume'] as int;
+      newState = newState.copyWith(volume: v.clamp(0, 100));
+      _applyVolume(v.clamp(0, 100));
     }
     if (payload.containsKey('do_not_disturb')) {
       newState = newState.copyWith(doNotDisturb: payload['do_not_disturb'] as bool);
@@ -287,6 +303,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       );
     } catch (e) {
       _log.w('Brightness: could not set: $e');
+    }
+  }
+
+  Future<void> _applyVolume(int value) async {
+    try {
+      await _platform.invokeMethod('setVolume', {'volume': value});
+    } catch (e) {
+      _log.w('Volume: could not set: $e');
     }
   }
 

@@ -319,35 +319,24 @@ class _VoiceOverlay extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Animated glow border
+        // Edge glow border — drawn with CustomPainter so it stays at the edges
         AnimatedBuilder(
           animation: controller,
           builder: (_, __) {
             final t = isListening
                 ? Curves.easeInOut.transform(controller.value)
                 : controller.value;
-            final spread = 8.0 + t * 24.0;
-            final blur = 20.0 + t * 30.0;
-            final opacity = 0.5 + t * 0.5;
-            return Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: glowColor.withValues(alpha: opacity),
-                  width: 3,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: glowColor.withValues(alpha: opacity * 0.6),
-                    blurRadius: blur,
-                    spreadRadius: spread,
-                  ),
-                ],
+            return CustomPaint(
+              painter: _GlowBorderPainter(
+                color: glowColor,
+                opacity: 0.5 + t * 0.5,
+                blur: 14.0 + t * 18.0,
               ),
             );
           },
         ),
 
-        // Centre indicator
+        // Bottom animation
         Align(
           alignment: Alignment.bottomCenter,
           child: Padding(
@@ -360,6 +349,32 @@ class _VoiceOverlay extends StatelessWidget {
       ],
     );
   }
+}
+
+class _GlowBorderPainter extends CustomPainter {
+  final Color color;
+  final double opacity;
+  final double blur;
+  const _GlowBorderPainter({required this.color, required this.opacity, required this.blur});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color.withValues(alpha: opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
+    // Inset slightly so the stroke isn't clipped at the very edge
+    const inset = 2.0;
+    canvas.drawRect(
+      Rect.fromLTWH(inset, inset, size.width - inset * 2, size.height - inset * 2),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GlowBorderPainter old) =>
+      old.color != color || old.opacity != opacity || old.blur != blur;
 }
 
 class _ListeningWaveform extends StatelessWidget {
