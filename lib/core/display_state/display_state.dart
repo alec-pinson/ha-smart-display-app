@@ -1,5 +1,52 @@
 import 'dart:typed_data';
 
+enum MediaPlayerState { idle, buffering, playing, paused }
+
+class MediaTrack {
+  final String title;
+  final String? artist;
+  final String? album;
+  final String? artUrl;
+  final int durationMs;
+  final int positionMs;
+
+  const MediaTrack({
+    required this.title,
+    this.artist,
+    this.album,
+    this.artUrl,
+    this.durationMs = 0,
+    this.positionMs = 0,
+  });
+
+  MediaTrack withPosition(int ms) => MediaTrack(
+    title: title,
+    artist: artist,
+    album: album,
+    artUrl: artUrl,
+    durationMs: durationMs,
+    positionMs: ms,
+  );
+
+  factory MediaTrack.fromJson(Map<String, dynamic> json) => MediaTrack(
+    title: json['title'] as String? ?? '',
+    artist: json['artist'] as String?,
+    album: json['album'] as String?,
+    artUrl: json['art_url'] as String?,
+    durationMs: (json['duration_ms'] as num?)?.toInt() ?? 0,
+    positionMs: (json['position_ms'] as num?)?.toInt() ?? 0,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    if (artist != null) 'artist': artist,
+    if (album != null) 'album': album,
+    if (artUrl != null) 'art_url': artUrl,
+    'duration_ms': durationMs,
+    'position_ms': positionMs,
+  };
+}
+
 class ForecastPeriod {
   final String datetime;
   final double? temperature;
@@ -184,6 +231,8 @@ class DisplayState {
   final List<AlarmData> alarms;
   final List<String> photos;
   final List<CameraData> cameras;
+  final MediaPlayerState mediaState;
+  final MediaTrack? mediaTrack;
 
   const DisplayState({
     required this.wakeWord,
@@ -204,6 +253,8 @@ class DisplayState {
     this.alarms = const [],
     this.photos = const [],
     this.cameras = const [],
+    this.mediaState = MediaPlayerState.idle,
+    this.mediaTrack,
   });
 
   DisplayState copyWith({
@@ -225,6 +276,9 @@ class DisplayState {
     List<AlarmData>? alarms,
     List<String>? photos,
     List<CameraData>? cameras,
+    MediaPlayerState? mediaState,
+    MediaTrack? mediaTrack,
+    bool clearMediaTrack = false,
   }) {
     return DisplayState(
       wakeWord: wakeWord ?? this.wakeWord,
@@ -245,6 +299,8 @@ class DisplayState {
       alarms: alarms ?? this.alarms,
       photos: photos ?? this.photos,
       cameras: cameras ?? this.cameras,
+      mediaState: mediaState ?? this.mediaState,
+      mediaTrack: clearMediaTrack ? null : (mediaTrack ?? this.mediaTrack),
     );
   }
 
@@ -261,5 +317,7 @@ class DisplayState {
         'uptime_seconds': uptimeSeconds,
         'wake_word_count': wakeWordCount,
         if (lux != null) 'lux': double.parse(lux!.toStringAsFixed(1)),
+        'media_state': mediaState.name,
+        if (mediaTrack != null) 'media_track': mediaTrack!.toJson(),
       };
 }

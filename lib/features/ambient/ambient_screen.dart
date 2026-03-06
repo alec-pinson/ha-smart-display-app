@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -597,6 +598,21 @@ class _NormalOverlay extends ConsumerWidget {
           Center(
             child: _TimerPanel(timers: state.timers),
           ),
+
+        // Now playing strip — bottom-left when media is active
+        if (state.mediaState != MediaPlayerState.idle && state.mediaTrack != null)
+          Positioned(
+            bottom: 32,
+            left: 32,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: _NowPlayingStrip(
+                mediaState: state.mediaState,
+                track: state.mediaTrack!,
+                notifier: ref.read(displayStateProvider.notifier),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -1052,6 +1068,121 @@ class _AmbientClockFallback extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(child: _AmbientClock());
   }
+}
+
+// ---------------------------------------------------------------------------
+// Now playing strip — bottom-left when media is active
+// ---------------------------------------------------------------------------
+
+class _NowPlayingStrip extends StatelessWidget {
+  final MediaPlayerState mediaState;
+  final MediaTrack track;
+  final DisplayStateNotifier notifier;
+  const _NowPlayingStrip({
+    required this.mediaState,
+    required this.track,
+    required this.notifier,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isPlaying = mediaState == MediaPlayerState.playing;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        children: [
+          // Album art
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: track.artUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: track.artUrl!,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => _artPlaceholder(),
+                  )
+                : _artPlaceholder(),
+          ),
+          const SizedBox(width: 12),
+          // Track info + progress bar
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  track.title,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                if (track.artist != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    track.artist!,
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ],
+                if (track.durationMs > 0) ...[
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: (track.positionMs / track.durationMs).clamp(0.0, 1.0),
+                    backgroundColor: Colors.white12,
+                    valueColor: const AlwaysStoppedAnimation(Colors.white38),
+                    minHeight: 2,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+          // Controls
+          IconButton(
+            icon: const Icon(Icons.skip_previous, color: Colors.white70),
+            onPressed: () => notifier.sendMediaCommand('previous'),
+            iconSize: 22,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+          IconButton(
+            icon: Icon(
+              isPlaying ? Icons.pause : Icons.play_arrow,
+              color: Colors.white70,
+            ),
+            onPressed: () => notifier.sendMediaCommand(isPlaying ? 'pause' : 'play'),
+            iconSize: 26,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          ),
+          IconButton(
+            icon: const Icon(Icons.skip_next, color: Colors.white70),
+            onPressed: () => notifier.sendMediaCommand('next'),
+            iconSize: 22,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _artPlaceholder() => Container(
+    width: 48,
+    height: 48,
+    decoration: BoxDecoration(
+      color: Colors.white12,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: const Icon(Icons.music_note, color: Colors.white38, size: 24),
+  );
 }
 
 // ---------------------------------------------------------------------------

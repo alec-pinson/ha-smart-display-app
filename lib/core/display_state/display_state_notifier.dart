@@ -9,6 +9,7 @@ import 'package:logger/logger.dart';
 
 import 'display_state.dart';
 import '../camera_analysis/camera_analysis_service.dart';
+import '../media/media_player_service.dart';
 import '../server/display_server.dart';
 import '../timer/timer_service.dart';
 import '../voice/voice_assistant_service.dart';
@@ -67,6 +68,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   final DateTime _startTime = DateTime.now();
 
   String? _focusedCamera;
+  StreamSubscription? _mediaStatusSub;
 
   final _notificationController = StreamController<NotificationData>.broadcast();
   Stream<NotificationData> get notificationStream => _notificationController.stream;
@@ -96,6 +98,15 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
           wakeWordCount: 0,
         )) {
     _startHeartbeat();
+    _mediaStatusSub = _ref.read(mediaPlayerServiceProvider).statusStream.listen(_onMediaStatus);
+  }
+
+  void _onMediaStatus(MediaStatus status) {
+    state = state.copyWith(
+      mediaState: status.state,
+      mediaTrack: state.mediaTrack?.withPosition(status.positionMs),
+    );
+    _pushState();
   }
 
   void _startHeartbeat() {
@@ -229,6 +240,39 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
           .toList();
       newState = newState.copyWith(alarms: alarms);
     }
+    if (payload.containsKey('play_media')) {
+      final pm = payload['play_media'] as Map<String, dynamic>;
+      final url = pm['url'] as String;
+      final track = MediaTrack(
+        title: pm['title'] as String? ?? '',
+        artist: pm['artist'] as String?,
+        album: pm['album'] as String?,
+        artUrl: pm['art_url'] as String?,
+        durationMs: (pm['duration_ms'] as num?)?.toInt() ?? 0,
+      );
+      newState = newState.copyWith(mediaState: MediaPlayerState.buffering, mediaTrack: track);
+      unawaited(_ref.read(mediaPlayerServiceProvider).play(url));
+    }
+    if (payload.containsKey('media_command')) {
+      final cmd = payload['media_command'] as String;
+      final svc = _ref.read(mediaPlayerServiceProvider);
+      switch (cmd) {
+        case 'pause':
+          unawaited(svc.pause());
+        case 'play':
+          unawaited(svc.resume());
+        case 'stop':
+          unawaited(svc.stop());
+          newState = newState.copyWith(mediaState: MediaPlayerState.idle, clearMediaTrack: true);
+        case 'seek':
+          final ms = (payload['position_ms'] as num?)?.toInt() ?? 0;
+          unawaited(svc.seek(ms));
+        case 'next':
+        case 'previous':
+          // No-op for URL streaming; HA drives queue
+          break;
+      }
+    }
     if (payload.containsKey('alarm_sounding')) {
       final sounding = payload['alarm_sounding'] as bool;
       final timerService = _ref.read(timerServiceProvider);
@@ -294,6 +338,26 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     });
   }
 
+  void sendMediaCommand(String command) {
+    final svc = _ref.read(mediaPlayerServiceProvider);
+    switch (command) {
+      case 'pause':
+        unawaited(svc.pause());
+      case 'play':
+        unawaited(svc.resume());
+      case 'stop':
+        unawaited(svc.stop());
+        state = state.copyWith(mediaState: MediaPlayerState.idle, clearMediaTrack: true);
+        _pushState();
+      case 'next':
+      case 'previous':
+        _ref.read(displayServerProvider).sendEvent({
+          'event': 'media_command',
+          'command': command,
+        });
+    }
+  }
+
   void recordWakeWordDetection() {
     state = state.copyWith(wakeWordCount: state.wakeWordCount + 1);
     _pushState();
@@ -332,6 +396,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   @override
   void dispose() {
     _heartbeatTimer?.cancel();
+    _mediaStatusSub?.cancel();
     _notificationController.close();
     _focusedCameraController.close();
     _openCameraController.close();

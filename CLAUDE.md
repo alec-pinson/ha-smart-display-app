@@ -30,6 +30,7 @@ adb -s G0918309042301JB install -r build/app/outputs/flutter-apk/app-debug.apk
 | `wakeWordServiceProvider`    | `core/wake_word/wake_word_service.dart`          | Provider<WakeWordService> — native wake word pipeline; detectionStream |
 | `voiceAssistantServiceProvider` | `core/voice/voice_assistant_service.dart`     | Provider<VoiceAssistantService> — record + VAD + send to HA        |
 | `cameraAnalysisServiceProvider` | `core/camera_analysis/camera_analysis_service.dart` | Provider<CameraAnalysisService> — reads hardware lux sensor via CameraAnalysisPlugin |
+| `mediaPlayerServiceProvider`    | `core/media/media_player_service.dart`              | Provider<MediaPlayerService> — wraps just_audio for URL-based media playback; emits MediaStatus |
 
 ## State flow
 ```
@@ -54,12 +55,21 @@ User presses notification button → DisplayStateNotifier.sendNotificationAction
 
 User adjusts thermostat → DisplayStateNotifier.setClimateTemperature(temp) / setClimateHvacMode(mode)
   → DisplayServer.sendEvent({event: climate_set_temperature/climate_set_hvac_mode, ...}) → HA calls climate service
+
+HA sends play_media → applyCommand() → MediaPlayerService.play(url) + track stored in state
+  → MediaPlayerService emits MediaStatus every 5s while playing → _onMediaStatus() → broadcastState() → HA entity updates
+
+User taps play/pause in NowPlayingStrip → DisplayStateNotifier.sendMediaCommand()
+  → play/pause/stop: MediaPlayerService acts locally; state flows back to HA via heartbeat
+  → next/previous: DisplayServer.sendEvent({event: media_command, command}) → ha_smart_display_media_command HA event fired
 ```
 
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate` |
+| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?` |
+| `MediaPlayerState` | enum: `idle / buffering / playing / paused`                                    |
+| `MediaTrack`    | `title`, `artist?`, `album?`, `artUrl?`, `durationMs`, `positionMs`; `withPosition(ms)` for updates |
 | `WeatherData`   | `condition`, `temperature`, `temperatureUnit`, `humidity`, `windSpeed`, `forecast` |
 | `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability`             |
 | `CameraData`    | `id`, `name`, `imageBytes` (Uint8List)                                         |
@@ -86,12 +96,15 @@ User adjusts thermostat → DisplayStateNotifier.setClimateTemperature(temp) / s
 | `tapAction` | String?        | null       | dialog tap fires `notification_action` with index -1         |
 | `position`  | String         | 'center'   | dialog alignment: center / top_left / top_center / top_right / bottom_left / bottom_center / bottom_right |
 
-## Audio (TimerService)
-Two independent `AudioPlayer` instances:
-- `_chimePlayer` — fires when a timer/alarm expires on-device; loops until user dismisses the alert
-- `_haAlarmPlayer` — controlled by HA `alarm_sounding` command; loops until HA turns switch off
+## Audio
+Three independent `AudioPlayer` instances (no conflicts):
+- `TimerService._chimePlayer` — fires when a timer/alarm expires on-device; loops until user dismisses
+- `TimerService._haAlarmPlayer` — controlled by HA `alarm_sounding` command; loops until HA turns switch off
+- `MediaPlayerService._player` — URL-based media playback (music, TTS); controlled by `play_media` / `media_command`
 
 Asset: `assets/audio/timer_chime.mp3` — 3-note C-E-G ascending chime, ~2s.
+
+`android:usesCleartextTraffic="true"` is set in AndroidManifest — required for ExoPlayer to fetch audio over plain HTTP from HA/MA on the local network.
 
 ## Brightness
 Uses `window.attributes.screenBrightness` (Android `WindowManager.LayoutParams`) — controls
