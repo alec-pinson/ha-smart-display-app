@@ -14,6 +14,9 @@ class MainActivity : FlutterActivity() {
         // Register mDNS plugin
         flutterEngine.plugins.add(MdnsPlugin())
 
+        // Register wake word plugin
+        flutterEngine.plugins.add(WakeWordPlugin())
+
         // System channel — brightness control
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, systemChannel)
             .setMethodCallHandler { call, result ->

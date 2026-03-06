@@ -4,11 +4,26 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logger/logger.dart';
 
 import 'display_state.dart';
 import '../server/display_server.dart';
 import '../timer/timer_service.dart';
+import '../voice/voice_assistant_service.dart';
+
+const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
+const _storage = FlutterSecureStorage(aOptions: _androidOptions);
+const _wakeWordKey = 'wake_word';
+const _wakeWordSensitivityKey = 'wake_word_sensitivity';
+
+Future<String> loadPersistedWakeWord() async {
+  return await _storage.read(key: _wakeWordKey) ?? 'alexa';
+}
+
+Future<String> loadPersistedWakeWordSensitivity() async {
+  return await _storage.read(key: _wakeWordSensitivityKey) ?? 'medium';
+}
 
 class NotificationData {
   final String title;
@@ -56,9 +71,10 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _pushState();
   }
 
-  DisplayStateNotifier(this._ref)
-      : super(const DisplayState(
-          wakeWord: 'hey_jarvis',
+  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium'})
+      : super(DisplayState(
+          wakeWord: initialWakeWord,
+          wakeWordSensitivity: initialWakeWordSensitivity,
           ambientMode: 'clock',
           ambientActive: false,
           brightness: 128,
@@ -91,7 +107,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     var newState = state;
 
     if (payload.containsKey('wake_word')) {
-      newState = newState.copyWith(wakeWord: payload['wake_word'] as String);
+      final word = payload['wake_word'] as String;
+      newState = newState.copyWith(wakeWord: word);
+      _storage.write(key: _wakeWordKey, value: word);
+    }
+    if (payload.containsKey('wake_word_sensitivity')) {
+      final sensitivity = payload['wake_word_sensitivity'] as String;
+      newState = newState.copyWith(wakeWordSensitivity: sensitivity);
+      _storage.write(key: _wakeWordSensitivityKey, value: sensitivity);
     }
     if (payload.containsKey('ambient_mode')) {
       newState = newState.copyWith(ambientMode: payload['ambient_mode'] as String);
@@ -188,6 +211,19 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       } else {
         timerService.stopHaAlarm();
       }
+    }
+    if (payload.containsKey('voice_response')) {
+      final vr = payload['voice_response'] as Map<String, dynamic>;
+      final text = vr['text'] as String? ?? '';
+      if (text.isNotEmpty) {
+        _notificationController.add(NotificationData(
+          title: 'Assistant',
+          message: text,
+          duration: 8,
+          style: 'banner',
+        ));
+      }
+      _ref.read(voiceAssistantServiceProvider).onResponseReceived();
     }
 
     state = newState;

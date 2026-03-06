@@ -20,13 +20,15 @@ adb -s G0918309042301JB install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
 ## Key providers
-| Provider                | File                                             | Purpose                                                   |
-| ----------------------- | ------------------------------------------------ | --------------------------------------------------------- |
-| `deviceIdProvider`      | `core/device/device_id_service.dart`             | FutureProvider<String> — persistent UUID                  |
-| `pairingProvider`       | `core/pairing/pairing_service.dart`              | StateNotifierProvider<PairingNotifier, PairingState>      |
-| `displayServerProvider` | `core/server/display_server.dart`                | Provider<DisplayServer> — WebSocket server singleton      |
-| `displayStateProvider`  | `core/display_state/display_state_notifier.dart` | StateNotifierProvider<DisplayStateNotifier, DisplayState> |
-| `timerServiceProvider`  | `core/timer/timer_service.dart`                  | Provider<TimerService> — expiry watcher + audio           |
+| Provider                     | File                                             | Purpose                                                             |
+| ---------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- |
+| `deviceIdProvider`           | `core/device/device_id_service.dart`             | FutureProvider<String> — persistent UUID                            |
+| `pairingProvider`            | `core/pairing/pairing_service.dart`              | StateNotifierProvider<PairingNotifier, PairingState>                |
+| `displayServerProvider`      | `core/server/display_server.dart`                | Provider<DisplayServer> — WebSocket server singleton                |
+| `displayStateProvider`       | `core/display_state/display_state_notifier.dart` | StateNotifierProvider<DisplayStateNotifier, DisplayState>; initialised with persisted wake word + sensitivity |
+| `timerServiceProvider`       | `core/timer/timer_service.dart`                  | Provider<TimerService> — expiry watcher + audio                     |
+| `wakeWordServiceProvider`    | `core/wake_word/wake_word_service.dart`          | Provider<WakeWordService> — native wake word pipeline; detectionStream |
+| `voiceAssistantServiceProvider` | `core/voice/voice_assistant_service.dart`     | Provider<VoiceAssistantService> — record + VAD + send to HA        |
 
 ## State flow
 ```
@@ -56,7 +58,7 @@ User adjusts thermostat → DisplayStateNotifier.setClimateTemperature(temp) / s
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `photos`, `cameras`, `timers`, `alarms`, `climate`      |
+| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `photos`, `cameras`, `timers`, `alarms`, `climate` |
 | `WeatherData`   | `condition`, `temperature`, `temperatureUnit`, `humidity`, `windSpeed`, `forecast` |
 | `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability`             |
 | `CameraData`    | `id`, `name`, `imageBytes` (Uint8List)                                         |
@@ -94,10 +96,16 @@ Asset: `assets/audio/timer_chime.mp3` — 3-note C-E-G ascending chime, ~2s.
 Uses `window.attributes.screenBrightness` (Android `WindowManager.LayoutParams`) — controls
 app window brightness directly. No `WRITE_SETTINGS` permission needed.
 
+## Secure storage
+`FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true))` is used
+consistently across the codebase. Keys stored: `device_id`, `paired`, `pairing_code`,
+`wake_word`, `wake_word_sensitivity`. Wake word and sensitivity are loaded in `main()` before
+the `ProviderContainer` is created, and injected via `displayStateProvider.overrideWith()`.
+
 ## Permissions
 `permission_handler` package requests `RECORD_AUDIO` at first launch via post-frame callback
 in `AmbientScreen.initState` (NOT in `main()` — the Activity isn't ready to show system
-dialogs before `runApp`). Needed for future wake-word detection feature.
+dialogs before `runApp`).
 
 ## Connection indicator + status dialog
 Dot in top-right, hidden in ambient mode. Tap opens `_StatusDialog` showing: HA connection

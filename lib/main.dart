@@ -19,14 +19,18 @@ void main() async {
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   await WakelockPlus.enable();
 
-  // Load persisted pairing state before first frame
+  // Load persisted state before first frame
   final alreadyPaired = await loadPairingState();
+  final initialWakeWord = await loadPersistedWakeWord();
+  final initialWakeWordSensitivity = await loadPersistedWakeWordSensitivity();
 
   final container = ProviderContainer(
     overrides: [
-      // Inject the loaded pairing state so the notifier starts correctly
       pairingProvider.overrideWith(
         (ref) => PairingNotifier(alreadyPaired),
+      ),
+      displayStateProvider.overrideWith(
+        (ref) => DisplayStateNotifier(ref, initialWakeWord: initialWakeWord, initialWakeWordSensitivity: initialWakeWordSensitivity),
       ),
     ],
   );

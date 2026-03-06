@@ -167,6 +167,7 @@ class AlarmData {
 
 class DisplayState {
   final String wakeWord;
+  final String wakeWordSensitivity; // 'low' | 'medium' | 'high'
   final String ambientMode;
   final bool ambientActive;
   final int brightness;
@@ -183,6 +184,7 @@ class DisplayState {
 
   const DisplayState({
     required this.wakeWord,
+    this.wakeWordSensitivity = 'medium',
     required this.ambientMode,
     required this.ambientActive,
     required this.brightness,
@@ -200,6 +202,7 @@ class DisplayState {
 
   DisplayState copyWith({
     String? wakeWord,
+    String? wakeWordSensitivity,
     String? ambientMode,
     bool? ambientActive,
     int? brightness,
@@ -216,6 +219,7 @@ class DisplayState {
   }) {
     return DisplayState(
       wakeWord: wakeWord ?? this.wakeWord,
+      wakeWordSensitivity: wakeWordSensitivity ?? this.wakeWordSensitivity,
       ambientMode: ambientMode ?? this.ambientMode,
       ambientActive: ambientActive ?? this.ambientActive,
       brightness: brightness ?? this.brightness,
@@ -234,6 +238,7 @@ class DisplayState {
 
   Map<String, dynamic> toJson() => {
         'wake_word': wakeWord,
+        'wake_word_sensitivity': wakeWordSensitivity,
         'ambient_mode': ambientMode,
         'ambient_active': ambientActive,
         'brightness': brightness,

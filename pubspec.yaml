@@ -23,9 +23,6 @@ dependencies:
   # Keep screen on
   wakelock_plus: ^1.1.4
 
-  # TFLite for wake word (Phase 3)
-  tflite_flutter: ^0.10.4
-
   # Audio recording (Phase 3)
   record: ^5.1.2
 

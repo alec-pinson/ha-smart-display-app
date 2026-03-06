@@ -12,6 +12,8 @@ import '../../core/display_state/display_state.dart';
 import '../../core/display_state/display_state_notifier.dart';
 import '../../core/server/display_server.dart';
 import '../../core/timer/timer_service.dart';
+import '../../core/voice/voice_assistant_service.dart';
+import '../../core/wake_word/wake_word_service.dart';
 import '../../ui/widgets/connection_indicator.dart';
 import '../../ui/widgets/weather_icon.dart';
 
@@ -26,9 +28,13 @@ class AmbientScreen extends ConsumerStatefulWidget {
 class _AmbientScreenState extends ConsumerState<AmbientScreen>
     with TickerProviderStateMixin {
   late AnimationController _auroraController;
+  late AnimationController _glowController;
   StreamSubscription? _alertSub;
   StreamSubscription? _notificationSub;
   StreamSubscription? _openCameraSub;
+  StreamSubscription? _voiceStateSub;
+  StreamSubscription? _wakeWordDetectionSub;
+  VoiceAssistantState _voiceState = VoiceAssistantState.idle;
   // Tracks the currently-showing modal notification so we can dismiss it
   // before showing the next one (prevents scrim stacking).
   Route<void>? _currentNotificationRoute;
@@ -41,6 +47,11 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
       vsync: this,
       duration: const Duration(seconds: 20),
     )..repeat();
+
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Request microphone permission for wake-word detection.
@@ -61,6 +72,31 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
       final notifier = ref.read(displayStateProvider.notifier);
       _notificationSub = notifier.notificationStream.listen((notification) {
         if (mounted) _showNotification(notification);
+      });
+
+      // Initialise wake word service (starts listening immediately)
+      final wakeWordSvc = ref.read(wakeWordServiceProvider);
+      final vaService = ref.read(voiceAssistantServiceProvider);
+
+      // Wake word detected → hand off to voice assistant service
+      _wakeWordDetectionSub = wakeWordSvc.detectionStream.listen((_) {
+        if (mounted) vaService.onWakeWordDetected();
+      });
+
+      // Voice assistant state stream — drives animation + resumes wake word on idle
+      _voiceStateSub = vaService.stateStream.listen((s) {
+        if (!mounted) return;
+        setState(() => _voiceState = s);
+        if (s == VoiceAssistantState.listening || s == VoiceAssistantState.detected) {
+          _glowController.repeat(reverse: true);
+        } else if (s == VoiceAssistantState.processing) {
+          _glowController.repeat();
+        } else {
+          _glowController.stop();
+          _glowController.reset();
+          // Resume wake word detection now that voice recording is done
+          wakeWordSvc.resume();
+        }
       });
 
       // Open camera stream (triggered by HA service call)
@@ -157,9 +193,12 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
   @override
   void dispose() {
     _auroraController.dispose();
+    _glowController.dispose();
     _alertSub?.cancel();
     _notificationSub?.cancel();
     _openCameraSub?.cancel();
+    _voiceStateSub?.cancel();
+    _wakeWordDetectionSub?.cancel();
     super.dispose();
   }
 
@@ -245,7 +284,132 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
               child: Container(color: Colors.black),
             ),
           ),
+
+          // Voice assistant overlay — glow border + listening animation
+          if (_voiceState != VoiceAssistantState.idle)
+            IgnorePointer(
+              child: _VoiceOverlay(
+                state: _voiceState,
+                controller: _glowController,
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Voice assistant overlay — glow border + animated indicator
+// ---------------------------------------------------------------------------
+
+class _VoiceOverlay extends StatelessWidget {
+  final VoiceAssistantState state;
+  final AnimationController controller;
+  const _VoiceOverlay({required this.state, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final isListening = state == VoiceAssistantState.listening ||
+        state == VoiceAssistantState.detected;
+    final glowColor = isListening
+        ? const Color(0xFF4FC3F7) // light blue
+        : const Color(0xFF81C784); // light green (processing)
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Animated glow border
+        AnimatedBuilder(
+          animation: controller,
+          builder: (_, __) {
+            final t = isListening
+                ? Curves.easeInOut.transform(controller.value)
+                : controller.value;
+            final spread = 8.0 + t * 24.0;
+            final blur = 20.0 + t * 30.0;
+            final opacity = 0.5 + t * 0.5;
+            return Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: glowColor.withValues(alpha: opacity),
+                  width: 3,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: glowColor.withValues(alpha: opacity * 0.6),
+                    blurRadius: blur,
+                    spreadRadius: spread,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+
+        // Centre indicator
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 32),
+            child: isListening
+                ? _ListeningWaveform(controller: controller, color: glowColor)
+                : _ProcessingSpinner(color: glowColor),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ListeningWaveform extends StatelessWidget {
+  final AnimationController controller;
+  final Color color;
+  const _ListeningWaveform({required this.controller, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (_, __) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: List.generate(5, (i) {
+            final phase = (controller.value + i * 0.18) % 1.0;
+            final h = 8.0 + Curves.easeInOut.transform(
+              (phase < 0.5 ? phase * 2 : (1 - phase) * 2)
+            ) * 28.0;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: Container(
+                width: 5,
+                height: h,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+}
+
+class _ProcessingSpinner extends StatelessWidget {
+  final Color color;
+  const _ProcessingSpinner({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: CircularProgressIndicator(
+        color: color,
+        strokeWidth: 3,
       ),
     );
   }
