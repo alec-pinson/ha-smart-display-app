@@ -25,7 +25,7 @@ adb -s G0918309042301JB install -r build/app/outputs/flutter-apk/app-debug.apk
 | `deviceIdProvider`           | `core/device/device_id_service.dart`             | FutureProvider<String> — persistent UUID                            |
 | `pairingProvider`            | `core/pairing/pairing_service.dart`              | StateNotifierProvider<PairingNotifier, PairingState>                |
 | `displayServerProvider`      | `core/server/display_server.dart`                | Provider<DisplayServer> — WebSocket server singleton                |
-| `displayStateProvider`       | `core/display_state/display_state_notifier.dart` | StateNotifierProvider<DisplayStateNotifier, DisplayState>; initialised with persisted wake word + sensitivity |
+| `displayStateProvider`       | `core/display_state/display_state_notifier.dart` | StateNotifierProvider<DisplayStateNotifier, DisplayState>; initialised with persisted wake word + sensitivity + brightness |
 | `timerServiceProvider`       | `core/timer/timer_service.dart`                  | Provider<TimerService> — expiry watcher + audio                     |
 | `wakeWordServiceProvider`    | `core/wake_word/wake_word_service.dart`          | Provider<WakeWordService> — native wake word pipeline; detectionStream |
 | `voiceAssistantServiceProvider` | `core/voice/voice_assistant_service.dart`     | Provider<VoiceAssistantService> — record + VAD + send to HA        |
@@ -56,12 +56,17 @@ User presses notification button → DisplayStateNotifier.sendNotificationAction
 User adjusts thermostat → DisplayStateNotifier.setClimateTemperature(temp) / setClimateHvacMode(mode)
   → DisplayServer.sendEvent({event: climate_set_temperature/climate_set_hvac_mode, ...}) → HA calls climate service
 
-HA sends play_media → applyCommand() → MediaPlayerService.play(url) + track stored in state
+HA sends play_media → applyCommand() → MediaPlayerService.play(url); if title non-empty also sets mediaTrack
+  → if title empty (MA flow), keep current track displayed until media_track arrives
   → MediaPlayerService emits MediaStatus every 5s while playing → _onMediaStatus() → broadcastState() → HA entity updates
+  → idle state debounced 1.5s (_mediaIdleTimer) to avoid strip flickering during track changes
+
+HA sends media_track → applyCommand() → updates mediaTrack display without affecting playback
+  → used by MA integration to push real track title/artist/art when ma_media_player is configured
 
 User taps play/pause in NowPlayingStrip → DisplayStateNotifier.sendMediaCommand()
   → play/pause/stop: MediaPlayerService acts locally; state flows back to HA via heartbeat
-  → next/previous: DisplayServer.sendEvent({event: media_command, command}) → ha_smart_display_media_command HA event fired
+  → next/previous: DisplayServer.sendEvent({event: media_command, command}) → HA forwards to MA entity if configured
 ```
 
 ## Key data classes (`display_state.dart`)
@@ -113,8 +118,10 @@ app window brightness directly. No `WRITE_SETTINGS` permission needed.
 ## Secure storage
 `FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true))` is used
 consistently across the codebase. Keys stored: `device_id`, `paired`, `pairing_code`,
-`wake_word`, `wake_word_sensitivity`. Wake word and sensitivity are loaded in `main()` before
-the `ProviderContainer` is created, and injected via `displayStateProvider.overrideWith()`.
+`wake_word`, `wake_word_sensitivity`, `brightness`, `auto_brightness`. Wake word, sensitivity,
+brightness, and auto-brightness are loaded in `main()` before the `ProviderContainer` is
+created, and injected via `displayStateProvider.overrideWith()`. Brightness is applied to the
+screen immediately on startup from the persisted value.
 
 ## Permissions
 `permission_handler` requests `RECORD_AUDIO` and `CAMERA` at first launch via post-frame

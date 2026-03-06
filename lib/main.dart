@@ -24,6 +24,8 @@ void main() async {
   final initialWakeWord = await loadPersistedWakeWord();
   final initialWakeWordSensitivity = await loadPersistedWakeWordSensitivity();
   final initialVolume = await loadInitialVolume();
+  final initialBrightness = await loadPersistedBrightness();
+  final initialAutoBrightness = await loadPersistedAutoBrightness();
 
   final container = ProviderContainer(
     overrides: [
@@ -31,7 +33,7 @@ void main() async {
         (ref) => PairingNotifier(alreadyPaired),
       ),
       displayStateProvider.overrideWith(
-        (ref) => DisplayStateNotifier(ref, initialWakeWord: initialWakeWord, initialWakeWordSensitivity: initialWakeWordSensitivity, initialVolume: initialVolume),
+        (ref) => DisplayStateNotifier(ref, initialWakeWord: initialWakeWord, initialWakeWordSensitivity: initialWakeWordSensitivity, initialVolume: initialVolume, initialBrightness: initialBrightness, initialAutoBrightness: initialAutoBrightness),
       ),
     ],
   );

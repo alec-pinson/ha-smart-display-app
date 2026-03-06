@@ -1073,6 +1073,96 @@ class _AmbientClockFallback extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Now playing strip — bottom-left when media is active
 // ---------------------------------------------------------------------------
+// Scrolling text — scrolls left→right→left when text overflows its container
+// ---------------------------------------------------------------------------
+
+class _MarqueeText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  const _MarqueeText({required this.text, required this.style});
+
+  @override
+  State<_MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<_MarqueeText> {
+  final _scrollController = ScrollController();
+  Timer? _timer;
+  double _offset = 0;
+  bool _forward = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleStart(2000));
+  }
+
+  @override
+  void didUpdateWidget(_MarqueeText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _timer?.cancel();
+      _timer = null;
+      _offset = 0;
+      _forward = true;
+      if (_scrollController.hasClients) _scrollController.jumpTo(0);
+      _scheduleStart(2000);
+    }
+  }
+
+  void _scheduleStart(int delayMs) {
+    Future.delayed(Duration(milliseconds: delayMs), _tick);
+  }
+
+  void _tick() {
+    if (!mounted) return;
+    final max = _scrollController.hasClients ? _scrollController.position.maxScrollExtent : 0.0;
+    if (max <= 0) return; // fits — no scrolling needed
+
+    _timer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final max = _scrollController.position.maxScrollExtent;
+      if (_forward) {
+        _offset = (_offset + 0.7).clamp(0.0, max);
+        _scrollController.jumpTo(_offset);
+        if (_offset >= max) {
+          _timer?.cancel();
+          _timer = null;
+          _forward = false;
+          _scheduleStart(1200);
+        }
+      } else {
+        _offset = (_offset - 0.7).clamp(0.0, max);
+        _scrollController.jumpTo(_offset);
+        if (_offset <= 0) {
+          _timer?.cancel();
+          _timer = null;
+          _forward = true;
+          _scheduleStart(2000);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      controller: _scrollController,
+      physics: const NeverScrollableScrollPhysics(),
+      child: Text(widget.text, style: widget.style, maxLines: 1),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 class _NowPlayingStrip extends StatelessWidget {
   final MediaPlayerState mediaState;
@@ -1116,17 +1206,15 @@ class _NowPlayingStrip extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  track.title,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+                _MarqueeText(
+                  text: track.title.isNotEmpty ? track.title : 'Now Playing',
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
                 ),
-                if (track.artist != null) ...[
+                if (track.artist != null && track.artist!.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(
                     track.artist!,
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
                   ),

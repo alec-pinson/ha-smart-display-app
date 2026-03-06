@@ -18,6 +18,8 @@ const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
 const _storage = FlutterSecureStorage(aOptions: _androidOptions);
 const _wakeWordKey = 'wake_word';
 const _wakeWordSensitivityKey = 'wake_word_sensitivity';
+const _brightnessKey = 'brightness';
+const _autoBrightnessKey = 'auto_brightness';
 
 Future<String> loadPersistedWakeWord() async {
   return await _storage.read(key: _wakeWordKey) ?? 'alexa';
@@ -25,6 +27,16 @@ Future<String> loadPersistedWakeWord() async {
 
 Future<String> loadPersistedWakeWordSensitivity() async {
   return await _storage.read(key: _wakeWordSensitivityKey) ?? 'medium';
+}
+
+Future<int> loadPersistedBrightness() async {
+  final val = await _storage.read(key: _brightnessKey);
+  return val != null ? int.tryParse(val) ?? 128 : 128;
+}
+
+Future<bool> loadPersistedAutoBrightness() async {
+  final val = await _storage.read(key: _autoBrightnessKey);
+  return val == 'true';
 }
 
 Future<int> loadInitialVolume() async {
@@ -69,6 +81,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
 
   String? _focusedCamera;
   StreamSubscription? _mediaStatusSub;
+  Timer? _mediaIdleTimer;
 
   final _notificationController = StreamController<NotificationData>.broadcast();
   Stream<NotificationData> get notificationStream => _notificationController.stream;
@@ -84,13 +97,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _pushState();
   }
 
-  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', int initialVolume = 50})
+  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', int initialVolume = 50, int initialBrightness = 128, bool initialAutoBrightness = false})
       : super(DisplayState(
           wakeWord: initialWakeWord,
           wakeWordSensitivity: initialWakeWordSensitivity,
           ambientMode: 'clock',
           ambientActive: false,
-          brightness: 128,
+          brightness: initialBrightness,
+          autoBrightness: initialAutoBrightness,
           volume: initialVolume,
           doNotDisturb: false,
           screenOn: true,
@@ -99,14 +113,32 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         )) {
     _startHeartbeat();
     _mediaStatusSub = _ref.read(mediaPlayerServiceProvider).statusStream.listen(_onMediaStatus);
+    // Apply persisted brightness immediately on startup
+    if (initialAutoBrightness) {
+      _applyBrightness(-1);
+    } else {
+      _applyBrightness(initialBrightness);
+    }
   }
 
   void _onMediaStatus(MediaStatus status) {
-    state = state.copyWith(
-      mediaState: status.state,
-      mediaTrack: state.mediaTrack?.withPosition(status.positionMs),
-    );
-    _pushState();
+    if (status.state == MediaPlayerState.idle) {
+      // Debounce idle — during track changes just_audio briefly reports idle
+      // before the next play_media arrives. Only commit idle after 1.5s.
+      _mediaIdleTimer ??= Timer(const Duration(milliseconds: 1500), () {
+        _mediaIdleTimer = null;
+        state = state.copyWith(mediaState: MediaPlayerState.idle);
+        _pushState();
+      });
+    } else {
+      _mediaIdleTimer?.cancel();
+      _mediaIdleTimer = null;
+      state = state.copyWith(
+        mediaState: status.state,
+        mediaTrack: state.mediaTrack?.withPosition(status.positionMs),
+      );
+      _pushState();
+    }
   }
 
   void _startHeartbeat() {
@@ -148,6 +180,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     if (payload.containsKey('auto_brightness')) {
       final auto = payload['auto_brightness'] as bool;
       newState = newState.copyWith(autoBrightness: auto);
+      _storage.write(key: _autoBrightnessKey, value: auto.toString());
       if (auto) {
         _applyBrightness(-1); // -1 signals auto to native layer
       } else {
@@ -157,6 +190,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     if (payload.containsKey('brightness')) {
       final b = payload['brightness'] as int;
       newState = newState.copyWith(brightness: b);
+      _storage.write(key: _brightnessKey, value: b.toString());
       if (!newState.autoBrightness) _applyBrightness(b);
     }
     if (payload.containsKey('volume')) {
@@ -240,17 +274,31 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
           .toList();
       newState = newState.copyWith(alarms: alarms);
     }
+    if (payload.containsKey('media_track')) {
+      final mt = payload['media_track'] as Map<String, dynamic>;
+      newState = newState.copyWith(mediaTrack: MediaTrack.fromJson(mt));
+    }
     if (payload.containsKey('play_media')) {
+      // Cancel any pending idle timer — a new track is starting
+      _mediaIdleTimer?.cancel();
+      _mediaIdleTimer = null;
       final pm = payload['play_media'] as Map<String, dynamic>;
       final url = pm['url'] as String;
-      final track = MediaTrack(
-        title: pm['title'] as String? ?? '',
-        artist: pm['artist'] as String?,
-        album: pm['album'] as String?,
-        artUrl: pm['art_url'] as String?,
-        durationMs: (pm['duration_ms'] as num?)?.toInt() ?? 0,
-      );
-      newState = newState.copyWith(mediaState: MediaPlayerState.buffering, mediaTrack: track);
+      final title = pm['title'] as String? ?? '';
+      if (title.isNotEmpty) {
+        // Real metadata — update the displayed track immediately
+        final track = MediaTrack(
+          title: title,
+          artist: pm['artist'] as String?,
+          album: pm['album'] as String?,
+          artUrl: pm['art_url'] as String?,
+          durationMs: (pm['duration_ms'] as num?)?.toInt() ?? 0,
+        );
+        newState = newState.copyWith(mediaState: MediaPlayerState.buffering, mediaTrack: track);
+      } else {
+        // No metadata — keep current track displayed; media_track command will update it
+        newState = newState.copyWith(mediaState: MediaPlayerState.buffering);
+      }
       unawaited(_ref.read(mediaPlayerServiceProvider).play(url));
     }
     if (payload.containsKey('media_command')) {
@@ -260,6 +308,8 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         case 'pause':
           unawaited(svc.pause());
         case 'play':
+          _mediaIdleTimer?.cancel();
+          _mediaIdleTimer = null;
           unawaited(svc.resume());
         case 'stop':
           unawaited(svc.stop());
@@ -344,8 +394,12 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       case 'pause':
         unawaited(svc.pause());
       case 'play':
+        _mediaIdleTimer?.cancel();
+        _mediaIdleTimer = null;
         unawaited(svc.resume());
       case 'stop':
+        _mediaIdleTimer?.cancel();
+        _mediaIdleTimer = null;
         unawaited(svc.stop());
         state = state.copyWith(mediaState: MediaPlayerState.idle, clearMediaTrack: true);
         _pushState();
@@ -397,6 +451,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   void dispose() {
     _heartbeatTimer?.cancel();
     _mediaStatusSub?.cancel();
+    _mediaIdleTimer?.cancel();
     _notificationController.close();
     _focusedCameraController.close();
     _openCameraController.close();
