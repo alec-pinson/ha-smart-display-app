@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
 import 'package:record/record.dart';
 
@@ -23,6 +24,7 @@ class VoiceAssistantService {
   VoiceAssistantState get state => _state;
 
   final _recorder = AudioRecorder();
+  final _ttsPlayer = AudioPlayer();
   bool _isRecordingCommand = false;
 
   // VAD config
@@ -57,8 +59,20 @@ class VoiceAssistantService {
     });
   }
 
-  void onResponseReceived() {
+  void onResponseReceived({String? ttsUrl}) {
+    if (ttsUrl != null && ttsUrl.isNotEmpty) {
+      _playTts(ttsUrl);
+    }
     if (_state == VoiceAssistantState.processing) _resetToIdle();
+  }
+
+  Future<void> _playTts(String url) async {
+    try {
+      await _ttsPlayer.setUrl(url);
+      await _ttsPlayer.play();
+    } catch (e) {
+      _log.w('VoiceAssistant: TTS playback error: $e');
+    }
   }
 
   void _resetToIdle() {
@@ -200,6 +214,7 @@ class VoiceAssistantService {
 
   void dispose() {
     _recorder.dispose();
+    _ttsPlayer.dispose();
     _stateController.close();
   }
 }

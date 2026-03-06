@@ -215,6 +215,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     if (payload.containsKey('voice_response')) {
       final vr = payload['voice_response'] as Map<String, dynamic>;
       final text = vr['text'] as String? ?? '';
+      final ttsUrl = vr['tts_url'] as String?;
       if (text.isNotEmpty) {
         _notificationController.add(NotificationData(
           title: 'Assistant',
@@ -223,7 +224,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
           style: 'banner',
         ));
       }
-      _ref.read(voiceAssistantServiceProvider).onResponseReceived();
+      _ref.read(voiceAssistantServiceProvider).onResponseReceived(ttsUrl: ttsUrl);
     }
 
     state = newState;
