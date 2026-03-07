@@ -242,6 +242,24 @@ class BrowseItem {
   );
 }
 
+class DoorData {
+  final String id;
+  final String name;
+  final bool open;
+  const DoorData({required this.id, required this.name, required this.open});
+  factory DoorData.fromJson(Map<String, dynamic> j) =>
+      DoorData(id: j['id'] as String, name: j['name'] as String, open: j['open'] as bool);
+}
+
+class MotionData {
+  final String id;
+  final String name;
+  final bool detected;
+  const MotionData({required this.id, required this.name, required this.detected});
+  factory MotionData.fromJson(Map<String, dynamic> j) =>
+      MotionData(id: j['id'] as String, name: j['name'] as String, detected: j['detected'] as bool);
+}
+
 class BrowseResult {
   final String category;
   final List<BrowseItem> items;
@@ -278,6 +296,8 @@ class DisplayState {
   final MediaPlayerState mediaState;
   final MediaTrack? mediaTrack;
   final bool shuffleEnabled;
+  final List<DoorData> doors;
+  final List<MotionData> motions;
 
   const DisplayState({
     required this.wakeWord,
@@ -301,6 +321,8 @@ class DisplayState {
     this.mediaState = MediaPlayerState.idle,
     this.mediaTrack,
     this.shuffleEnabled = false,
+    this.doors = const [],
+    this.motions = const [],
   });
 
   DisplayState copyWith({
@@ -326,6 +348,8 @@ class DisplayState {
     MediaTrack? mediaTrack,
     bool clearMediaTrack = false,
     bool? shuffleEnabled,
+    List<DoorData>? doors,
+    List<MotionData>? motions,
   }) {
     return DisplayState(
       wakeWord: wakeWord ?? this.wakeWord,
@@ -349,6 +373,8 @@ class DisplayState {
       mediaState: mediaState ?? this.mediaState,
       mediaTrack: clearMediaTrack ? null : (mediaTrack ?? this.mediaTrack),
       shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
+      doors: doors ?? this.doors,
+      motions: motions ?? this.motions,
     );
   }
 
@@ -367,5 +393,7 @@ class DisplayState {
         if (lux != null) 'lux': double.parse(lux!.toStringAsFixed(1)),
         'media_state': mediaState.name,
         if (mediaTrack != null) 'media_track': mediaTrack!.toJson(),
+        'doors': doors.map((d) => {'id': d.id, 'name': d.name, 'open': d.open}).toList(),
+        'motions': motions.map((m) => {'id': m.id, 'name': m.name, 'detected': m.detected}).toList(),
       };
 }

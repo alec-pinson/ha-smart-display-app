@@ -91,7 +91,7 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled` |
+| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled`, `doors`, `motions` |
 | `MediaPlayerState` | enum: `idle / buffering / playing / paused`                                    |
 | `MediaTrack`    | `title`, `artist?`, `album?`, `artUrl?`, `durationMs`, `positionMs`; `withPosition(ms)` for updates |
 | `BrowseItem`    | `title`, `subtitle?`, `thumbnail?`, `mediaContentId`, `mediaContentType`, `canPlay`, `canExpand` |
@@ -102,6 +102,8 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 | `TimerData`     | `id`, `label`, `endsAt` (uses `remaining_seconds` from HA if present)          |
 | `AlarmData`     | `id`, `label`, `time` (HH:MM — seconds stripped from HA time selector output)  |
 | `ClimateData`   | `name`, `currentTemperature`, `humidity`, `targetTemperature`, `hvacMode`, `hvacModes`, `minTemp`, `maxTemp`, `unit` |
+| `DoorData`      | `id`, `name`, `open` — shown as chips below clock when `open == true`; icon: `door_front_door` |
+| `MotionData`    | `id`, `name`, `detected` — shown as chips below door chips when `detected == true`; tapping switches to cameras mode; icon: `directions_run` |
 
 ## Streams exposed by DisplayStateNotifier
 | Stream                | Type              | Purpose                                            |

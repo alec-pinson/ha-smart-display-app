@@ -584,12 +584,22 @@ class _NormalOverlay extends ConsumerWidget {
           ),
         ),
 
-        // Clock + weather + alarms — only in clock mode
+        // Clock + weather + alarms + door status — only in clock mode
         if (isClockMode)
           Positioned(
             top: 36,
             left: 40,
-            child: _ClockWeatherPanel(alarms: state.alarms),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ClockWeatherPanel(alarms: state.alarms),
+                _DoorStatusPanel(doors: state.doors),
+                _MotionStatusPanel(
+                  motions: state.motions,
+                  onTap: () => ref.read(displayStateProvider.notifier).setAmbientMode('cameras'),
+                ),
+              ],
+            ),
           ),
 
         // Climate chip — bottom-right in clock mode
@@ -2614,6 +2624,119 @@ class _NotificationDialogState extends State<_NotificationDialog> {
             ],
           ),
         ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Door status panel (normal clock mode, below clock panel)
+// ---------------------------------------------------------------------------
+
+class _DoorStatusPanel extends StatelessWidget {
+  final List<DoorData> doors;
+  const _DoorStatusPanel({required this.doors});
+
+  @override
+  Widget build(BuildContext context) {
+    final openDoors = doors.where((d) => d.open).toList();
+    if (openDoors.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < openDoors.length; i++) ...[
+            if (i > 0) const SizedBox(height: 6),
+            _DoorChip(name: openDoors[i].name),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DoorChip extends StatelessWidget {
+  final String name;
+  const _DoorChip({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(50),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.door_front_door, color: Colors.white, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            '$name open',
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Motion status panel (normal clock mode, below door status panel)
+// ---------------------------------------------------------------------------
+
+class _MotionStatusPanel extends StatelessWidget {
+  final List<MotionData> motions;
+  final VoidCallback? onTap;
+  const _MotionStatusPanel({required this.motions, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = motions.where((m) => m.detected).toList();
+    if (active.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < active.length; i++) ...[
+            if (i > 0) const SizedBox(height: 6),
+            _MotionChip(name: active[i].name, onTap: onTap),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MotionChip extends StatelessWidget {
+  final String name;
+  final VoidCallback? onTap;
+  const _MotionChip({required this.name, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(50),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.directions_run, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              '$name motion',
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+          ],
         ),
       ),
     );

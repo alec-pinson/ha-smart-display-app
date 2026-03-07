@@ -369,6 +369,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         timerService.stopHaAlarm();
       }
     }
+    if (payload.containsKey('doors')) {
+      final list = (payload['doors'] as List).cast<Map<String, dynamic>>();
+      newState = newState.copyWith(doors: list.map(DoorData.fromJson).toList());
+    }
+    if (payload.containsKey('motions')) {
+      final list = (payload['motions'] as List).cast<Map<String, dynamic>>();
+      newState = newState.copyWith(motions: list.map(MotionData.fromJson).toList());
+    }
     if (payload.containsKey('browse_result')) {
       final br = payload['browse_result'] as Map<String, dynamic>;
       _browseResultController.add(BrowseResult.fromJson(br));
