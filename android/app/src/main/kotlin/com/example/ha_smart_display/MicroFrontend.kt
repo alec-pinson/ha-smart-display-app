@@ -13,6 +13,7 @@ class MicroFrontend(private val sampleRate: Int = 16000, private val stepSizeMs:
     private var handle: Long = 0
 
     init {
+        check(isSupported) { "MicroFrontend: native library not loaded" }
         handle = nativeCreate(sampleRate, stepSizeMs)
         if (handle == 0L) error("MicroFrontend: native init failed")
     }
@@ -41,8 +42,9 @@ class MicroFrontend(private val sampleRate: Int = 16000, private val stepSizeMs:
     protected fun finalize() = close()
 
     companion object {
-        init {
-            System.loadLibrary("microfrontend")
+        private val libraryLoaded: Boolean by lazy {
+            try { System.loadLibrary("microfrontend"); true }
+            catch (_: UnsatisfiedLinkError) { false }
         }
 
         /** Returns 0 on failure. */
@@ -52,9 +54,6 @@ class MicroFrontend(private val sampleRate: Int = 16000, private val stepSizeMs:
         @JvmStatic external fun nativeReset(handle: Long)
 
         /** Returns true if the native library loaded successfully (arm64-v8a / x86_64 only). */
-        val isSupported: Boolean by lazy {
-            try { System.loadLibrary("microfrontend"); true }
-            catch (_: UnsatisfiedLinkError) { false }
-        }
+        val isSupported: Boolean get() = libraryLoaded
     }
 }

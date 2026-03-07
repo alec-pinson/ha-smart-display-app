@@ -991,7 +991,8 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
   @override
   Widget build(BuildContext context) {
     if (widget.photos.isEmpty) return const SizedBox.shrink();
-    final url = widget.photos[_index];
+    final safeIndex = _index.clamp(0, widget.photos.length - 1);
+    final url = widget.photos[safeIndex];
     return AnimatedSwitcher(
       duration: const Duration(seconds: 2),
       child: Image.network(
@@ -1090,16 +1091,6 @@ class _CameraTile extends StatelessWidget {
   }
 }
 
-// Fallback shown when a mode has no data yet
-class _AmbientClockFallback extends StatelessWidget {
-  const _AmbientClockFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(child: _AmbientClock());
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Now playing strip — bottom-left when media is active
 // ---------------------------------------------------------------------------
@@ -1118,6 +1109,7 @@ class _MarqueeText extends StatefulWidget {
 class _MarqueeTextState extends State<_MarqueeText> {
   final _scrollController = ScrollController();
   Timer? _timer;
+  Timer? _delayTimer;
   double _offset = 0;
   bool _forward = true;
 
@@ -1133,6 +1125,8 @@ class _MarqueeTextState extends State<_MarqueeText> {
     if (oldWidget.text != widget.text) {
       _timer?.cancel();
       _timer = null;
+      _delayTimer?.cancel();
+      _delayTimer = null;
       _offset = 0;
       _forward = true;
       if (_scrollController.hasClients) _scrollController.jumpTo(0);
@@ -1141,7 +1135,8 @@ class _MarqueeTextState extends State<_MarqueeText> {
   }
 
   void _scheduleStart(int delayMs) {
-    Future.delayed(Duration(milliseconds: delayMs), _tick);
+    _delayTimer?.cancel();
+    _delayTimer = Timer(Duration(milliseconds: delayMs), _tick);
   }
 
   void _tick() {
@@ -1177,6 +1172,7 @@ class _MarqueeTextState extends State<_MarqueeText> {
   @override
   void dispose() {
     _timer?.cancel();
+    _delayTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }

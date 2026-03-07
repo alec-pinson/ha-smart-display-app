@@ -192,6 +192,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   void applyCommand(Map<String, dynamic> payload) {
     _log.d('DisplayState: applying command: ${payload.keys}');
 
+    try {
+      _applyCommandInner(payload);
+    } catch (e, st) {
+      _log.w('DisplayState: error applying command: $e\n$st');
+    }
+  }
+
+  void _applyCommandInner(Map<String, dynamic> payload) {
     if (payload['action'] == 'restart') {
       Future.delayed(const Duration(milliseconds: 500), () => SystemNavigator.pop());
       return;
@@ -231,13 +239,13 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       }
     }
     if (payload.containsKey('brightness')) {
-      final b = payload['brightness'] as int;
+      final b = (payload['brightness'] as num).toInt();
       newState = newState.copyWith(brightness: b);
       _storage.write(key: _brightnessKey, value: b.toString());
       if (!newState.autoBrightness) _applyBrightness(b);
     }
     if (payload.containsKey('volume')) {
-      final v = payload['volume'] as int;
+      final v = (payload['volume'] as num).toInt();
       newState = newState.copyWith(volume: v.clamp(0, 100));
       _applyVolume(v.clamp(0, 100));
     }

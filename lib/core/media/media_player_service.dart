@@ -18,12 +18,13 @@ class MediaPlayerService {
   final _player = AudioPlayer();
   final _statusController = StreamController<MediaStatus>.broadcast();
   Timer? _positionTimer;
+  StreamSubscription? _playerStateSub;
   MediaPlayerState _currentState = MediaPlayerState.idle;
 
   Stream<MediaStatus> get statusStream => _statusController.stream;
 
   MediaPlayerService() {
-    _player.playerStateStream.listen(_onPlayerState);
+    _playerStateSub = _player.playerStateStream.listen(_onPlayerState);
   }
 
   void _onPlayerState(PlayerState ps) {
@@ -93,6 +94,7 @@ class MediaPlayerService {
 
   void dispose() {
     _positionTimer?.cancel();
+    _playerStateSub?.cancel();
     _statusController.close();
     _player.dispose();
   }

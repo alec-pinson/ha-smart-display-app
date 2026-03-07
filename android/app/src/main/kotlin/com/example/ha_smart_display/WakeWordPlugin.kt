@@ -170,22 +170,14 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         }
         val interp = Interpreter(modelBuffer)
         interpreter = interp
-        Log.d(TAG, "startAll: model loaded — ${interp.inputTensorCount} inputs, ${interp.outputTensorCount} outputs")
-        for (i in 0 until interp.inputTensorCount) {
-            val t = interp.getInputTensor(i)
-            Log.d(TAG, "  input[$i]: shape=${t.shape().toList()} type=${t.dataType()} scale=${t.quantizationParams().scale} zp=${t.quantizationParams().zeroPoint}")
-        }
-        for (i in 0 until interp.outputTensorCount) {
-            val t = interp.getOutputTensor(i)
-            Log.d(TAG, "  output[$i]: shape=${t.shape().toList()} type=${t.dataType()} scale=${t.quantizationParams().scale} zp=${t.quantizationParams().zeroPoint}")
-        }
+        Log.d(TAG, "startAll: model loaded for $wakeWord")
 
         val iqp = interp.getInputTensor(0).quantizationParams()
         inputScale = if (iqp.scale == 0f) 1f else iqp.scale
         inputZeroPoint = iqp.zeroPoint
         val oqp = interp.getOutputTensor(0).quantizationParams()
         outputScale = if (oqp.scale == 0f) 0.00390625f else oqp.scale
-        Log.d(TAG, "input quant: scale=$inputScale zp=$inputZeroPoint | output quant: scale=$outputScale zp=${oqp.zeroPoint} shape=${interp.getOutputTensor(0).shape().toList()}")
+        Log.d(TAG, "startAll: quant in(scale=$inputScale zp=$inputZeroPoint) out(scale=$outputScale)")
         loggedSampleFeatures = false
 
         // Set up microfrontend
@@ -321,14 +313,9 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         val rawByte = outputBuf.get().toInt() and 0xFF
         val probability = rawByte * outputScale
 
-        // Always log non-trivial outputs so we can see speech response
-        if (rawByte > 5) {
+        // Log significant spikes — rawByte > 20 filters out ambient noise
+        if (rawByte > 20) {
             Log.d(TAG, "spike! rawByte=$rawByte prob=${"%.4f".format(probability)}")
-        }
-        // Log full 40-bin feature vector on strong spikes to diagnose speech pattern
-        if (rawByte > 10) {
-            val allBins = batch.flatMap { it.toList() }.map { "%.1f".format(it) }
-            Log.d(TAG, "features40: $allBins")
         }
         return probability.coerceIn(0f, 1f)
     }
@@ -349,13 +336,13 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         probabilityWindow.add(probability)
         if (probabilityWindow.size > slidingWindowSize) probabilityWindow.removeAt(0)
 
-        // Log probabilities every ~50 frames (~500ms) to avoid logcat spam
-        if (++_logThrottle >= 50) {
+        // Log probabilities every ~200 frames (~2s) to avoid logcat spam
+        if (++_logThrottle >= 200) {
             _logThrottle = 0
             Log.d(TAG, "prob=${"%.3f".format(probability)} window=${probabilityWindow.map { "%.2f".format(it) }}")
         }
-        // Re-enable feature logging every ~500 frames (~5s) so we can see feature changes
-        if (++_featureLogCounter >= 500) {
+        // Re-enable feature logging every ~1000 frames (~10s)
+        if (++_featureLogCounter >= 1000) {
             _featureLogCounter = 0
             loggedSampleFeatures = false
         }

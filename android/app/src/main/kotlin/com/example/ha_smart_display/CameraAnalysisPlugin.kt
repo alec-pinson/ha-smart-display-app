@@ -77,7 +77,11 @@ class CameraAnalysisPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Eve
     }
 
     private fun start() {
-        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        if (sensorManager == null) {
+            Log.w(TAG, "SensorManager not available")
+            return
+        }
         lightSensor = sensorManager!!.getDefaultSensor(Sensor.TYPE_LIGHT)
         if (lightSensor == null) {
             Log.w(TAG, "No hardware light sensor")

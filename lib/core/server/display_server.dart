@@ -158,7 +158,9 @@ class DisplayServer {
     for (final client in List.of(_clients)) {
       try {
         client.sink.add(msg);
-      } catch (_) {}
+      } catch (e) {
+        _log.d('DisplayServer: ping send failed: $e');
+      }
     }
   }
 
@@ -168,7 +170,9 @@ class DisplayServer {
     for (final client in List.of(_clients)) {
       try {
         client.sink.add(msg);
-      } catch (_) {}
+      } catch (e) {
+        _log.d('DisplayServer: event send failed: $e');
+      }
     }
   }
 
