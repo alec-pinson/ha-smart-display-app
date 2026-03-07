@@ -66,7 +66,13 @@ HA sends media_track → applyCommand() → updates mediaTrack display without a
 
 User taps play/pause in NowPlayingStrip → DisplayStateNotifier.sendMediaCommand()
   → play/pause/stop: MediaPlayerService acts locally; state flows back to HA via heartbeat
-  → next/previous: DisplayServer.sendEvent({event: media_command, command}) → HA forwards to MA entity if configured
+  → next/previous/shuffle: DisplayServer.sendEvent({event: media_command, command}) → HA forwards to MA entity if configured
+
+User taps album art / track info in NowPlayingStrip → showDialog → _MusicScreen
+  → initState subscribes to browseResultStream
+  → user taps tab → sendBrowseRequest(category) → HA browses MA root then category → browse_result command
+  → applyCommand() handles browse_result → pushes to browseResultStream → _MusicScreen updates panel
+  → user taps item → sendPlayMediaItem(id, type) → HA calls media_player.play_media on MA entity
 ```
 
 ## Key data classes (`display_state.dart`)
@@ -75,6 +81,8 @@ User taps play/pause in NowPlayingStrip → DisplayStateNotifier.sendMediaComman
 | `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?` |
 | `MediaPlayerState` | enum: `idle / buffering / playing / paused`                                    |
 | `MediaTrack`    | `title`, `artist?`, `album?`, `artUrl?`, `durationMs`, `positionMs`; `withPosition(ms)` for updates |
+| `BrowseItem`    | `title`, `subtitle?`, `thumbnail?`, `mediaContentId`, `mediaContentType`, `canPlay`, `canExpand` |
+| `BrowseResult`  | `category`, `items: List<BrowseItem>`                                          |
 | `WeatherData`   | `condition`, `temperature`, `temperatureUnit`, `humidity`, `windSpeed`, `forecast` |
 | `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability`             |
 | `CameraData`    | `id`, `name`, `imageBytes` (Uint8List)                                         |
@@ -88,6 +96,7 @@ User taps play/pause in NowPlayingStrip → DisplayStateNotifier.sendMediaComman
 | `notificationStream`  | `NotificationData`| Transient notification overlays                    |
 | `focusedCameraStream` | `CameraData`      | Live camera frames for full-screen view            |
 | `openCameraStream`    | `CameraData`      | HA-triggered open_camera command (empty imageBytes)|
+| `browseResultStream`  | `BrowseResult`    | MA library browse results for Music screen         |
 
 ## NotificationData fields
 | Field       | Type           | Default    | Notes                                                        |

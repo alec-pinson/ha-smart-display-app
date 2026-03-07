@@ -610,6 +610,11 @@ class _NormalOverlay extends ConsumerWidget {
                 mediaState: state.mediaState,
                 track: state.mediaTrack!,
                 notifier: ref.read(displayStateProvider.notifier),
+                onTapInfo: () => showDialog(
+                  context: context,
+                  barrierColor: Colors.black,
+                  builder: (_) => const _MusicScreen(),
+                ),
               ),
             ),
           ),
@@ -1168,10 +1173,12 @@ class _NowPlayingStrip extends StatelessWidget {
   final MediaPlayerState mediaState;
   final MediaTrack track;
   final DisplayStateNotifier notifier;
+  final VoidCallback? onTapInfo;
   const _NowPlayingStrip({
     required this.mediaState,
     required this.track,
     required this.notifier,
+    this.onTapInfo,
   });
 
   @override
@@ -1186,48 +1193,57 @@ class _NowPlayingStrip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Album art
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: track.artUrl != null
-                ? CachedNetworkImage(
-                    imageUrl: track.artUrl!,
-                    width: 48,
-                    height: 48,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _artPlaceholder(),
-                  )
-                : _artPlaceholder(),
-          ),
-          const SizedBox(width: 12),
-          // Track info + progress bar
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Album art + track info — tappable to open music screen
+          GestureDetector(
+            onTap: onTapInfo,
+            behavior: HitTestBehavior.opaque,
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _MarqueeText(
-                  text: track.title.isNotEmpty ? track.title : 'Now Playing',
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: track.artUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: track.artUrl!,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => _artPlaceholder(),
+                        )
+                      : _artPlaceholder(),
                 ),
-                if (track.artist != null && track.artist!.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    track.artist!,
-                    style: const TextStyle(color: Colors.white60, fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 180,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _MarqueeText(
+                        text: track.title.isNotEmpty ? track.title : 'Now Playing',
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                      ),
+                      if (track.artist != null && track.artist!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          track.artist!,
+                          style: const TextStyle(color: Colors.white60, fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ],
+                      if (track.durationMs > 0) ...[
+                        const SizedBox(height: 6),
+                        LinearProgressIndicator(
+                          value: (track.positionMs / track.durationMs).clamp(0.0, 1.0),
+                          backgroundColor: Colors.white12,
+                          valueColor: const AlwaysStoppedAnimation(Colors.white38),
+                          minHeight: 2,
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-                if (track.durationMs > 0) ...[
-                  const SizedBox(height: 6),
-                  LinearProgressIndicator(
-                    value: (track.positionMs / track.durationMs).clamp(0.0, 1.0),
-                    backgroundColor: Colors.white12,
-                    valueColor: const AlwaysStoppedAnimation(Colors.white38),
-                    minHeight: 2,
-                  ),
-                ],
+                ),
               ],
             ),
           ),
@@ -1270,6 +1286,511 @@ class _NowPlayingStrip extends StatelessWidget {
       borderRadius: BorderRadius.circular(6),
     ),
     child: const Icon(Icons.music_note, color: Colors.white38, size: 24),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Music full-screen — opens when user taps the Now Playing strip
+// ---------------------------------------------------------------------------
+
+class _MusicScreen extends ConsumerStatefulWidget {
+  const _MusicScreen();
+
+  @override
+  ConsumerState<_MusicScreen> createState() => _MusicScreenState();
+}
+
+class _MusicScreenState extends ConsumerState<_MusicScreen>
+    with SingleTickerProviderStateMixin {
+  static const _categoryLabels = ['Artists', 'Albums', 'Tracks', 'Playlists', 'Radio'];
+  static const _categoryKeys   = ['artists', 'albums', 'tracks', 'playlists', 'radio'];
+
+  int _selectedTab = 0;
+  List<BrowseItem> _items = [];
+  bool _loading = false;
+  bool _panelVisible = false;
+  StreamSubscription<BrowseResult>? _browseSub;
+  Timer? _loadTimeout;
+  late AnimationController _panelController;
+  late Animation<Offset> _panelSlide;
+  late Animation<double> _scrimOpacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _panelController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+    _panelSlide = Tween<Offset>(
+      begin: const Offset(1.0, 0.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _panelController, curve: Curves.easeOutCubic));
+    _scrimOpacity = Tween<double>(begin: 0.0, end: 0.45)
+        .animate(CurvedAnimation(parent: _panelController, curve: Curves.easeOut));
+
+    _browseSub = ref.read(displayStateProvider.notifier).browseResultStream.listen((result) {
+      if (!mounted) return;
+      if (result.category == _categoryKeys[_selectedTab]) {
+        _loadTimeout?.cancel();
+        setState(() {
+          _items = result.items;
+          _loading = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _browseSub?.cancel();
+    _loadTimeout?.cancel();
+    _panelController.dispose();
+    super.dispose();
+  }
+
+  void _openTab(int index) {
+    // Toggle closed if already open on same tab
+    if (_panelVisible && _selectedTab == index) {
+      _closePanel();
+      return;
+    }
+    _loadTimeout?.cancel();
+    setState(() {
+      _selectedTab = index;
+      _loading = true;
+      _items = [];
+      _panelVisible = true;
+    });
+    _panelController.forward(from: _panelVisible ? _panelController.value : 0.0);
+    ref.read(displayStateProvider.notifier).sendBrowseRequest(_categoryKeys[index]);
+    _loadTimeout = Timer(const Duration(seconds: 8), () {
+      if (mounted && _loading) setState(() => _loading = false);
+    });
+  }
+
+  void _closePanel() {
+    _panelController.reverse().then((_) {
+      if (mounted) setState(() => _panelVisible = false);
+    });
+  }
+
+  void _onItemTap(BrowseItem item) {
+    if (item.canPlay) {
+      ref.read(displayStateProvider.notifier).sendPlayMediaItem(
+        item.mediaContentId, item.mediaContentType,
+      );
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(displayStateProvider);
+    final track = state.mediaTrack;
+    final isPlaying = state.mediaState == MediaPlayerState.playing;
+    final notifier = ref.read(displayStateProvider.notifier);
+
+    return Dialog.fullscreen(
+      backgroundColor: const Color(0xFF060B14),
+      child: Stack(
+        children: [
+          // Main content
+          Column(
+            children: [
+              _buildHeader(context),
+              Expanded(child: _buildNowPlaying(track, isPlaying, notifier)),
+              _buildTabBar(),
+            ],
+          ),
+          // Scrim — only when panel is visible
+          if (_panelVisible)
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _scrimOpacity,
+                builder: (_, __) => GestureDetector(
+                  onTap: _closePanel,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    color: Colors.black.withValues(alpha: _scrimOpacity.value),
+                  ),
+                ),
+              ),
+            ),
+          // Slide-in panel from right
+          if (_panelVisible)
+            Positioned(
+              right: 0,
+              top: 52,   // below header
+              bottom: 52, // above tab bar
+              width: 500,
+              child: SlideTransition(
+                position: _panelSlide,
+                child: _buildPanel(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white70),
+            onPressed: () => Navigator.of(context).pop(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
+          const Text(
+            'Now Playing',
+            style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w400),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNowPlaying(MediaTrack? track, bool isPlaying, DisplayStateNotifier notifier) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(48, 24, 48, 24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Big album art
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: track?.artUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: track!.artUrl!,
+                    width: 280,
+                    height: 280,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => _artPlaceholder(280),
+                  )
+                : _artPlaceholder(280),
+          ),
+          const SizedBox(width: 52),
+          // Track info + controls
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  track?.title.isNotEmpty == true ? track!.title : 'Nothing playing',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 30,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (track?.artist != null && track!.artist!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    track.artist!,
+                    style: const TextStyle(color: Colors.white60, fontSize: 20, fontWeight: FontWeight.w300),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (track?.album != null && track!.album!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    track.album!,
+                    style: const TextStyle(color: Colors.white38, fontSize: 16, fontWeight: FontWeight.w300),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (track != null && track.durationMs > 0) ...[
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      Text(
+                        _formatDuration(track.positionMs),
+                        style: const TextStyle(color: Colors.white38, fontSize: 13),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: LinearProgressIndicator(
+                          value: (track.positionMs / track.durationMs).clamp(0.0, 1.0),
+                          backgroundColor: Colors.white12,
+                          valueColor: const AlwaysStoppedAnimation(Colors.white54),
+                          minHeight: 4,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Text(
+                        _formatDuration(track.durationMs),
+                        style: const TextStyle(color: Colors.white38, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 32),
+                // Controls
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _skipBtn(Icons.skip_previous_rounded, () => notifier.sendMediaCommand('previous')),
+                    const SizedBox(width: 20),
+                    // Play / Pause
+                    GestureDetector(
+                      onTap: () => notifier.sendMediaCommand(isPlaying ? 'pause' : 'play'),
+                      child: Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.12),
+                          border: Border.all(color: Colors.white30, width: 1.5),
+                        ),
+                        child: Icon(
+                          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 40,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    _skipBtn(Icons.skip_next_rounded, () => notifier.sendMediaCommand('next')),
+                    const SizedBox(width: 32),
+                    // Shuffle
+                    GestureDetector(
+                      onTap: () => notifier.sendMediaCommand('shuffle'),
+                      behavior: HitTestBehavior.opaque,
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Icon(Icons.shuffle_rounded, color: Colors.white38, size: 30),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _skipBtn(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: 0.06),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Icon(icon, color: Colors.white70, size: 30),
+      ),
+    );
+  }
+
+  Widget _artPlaceholder(double size) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      color: Colors.white10,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Icon(Icons.music_note_rounded, color: Colors.white24, size: size * 0.35),
+  );
+
+  String _formatDuration(int ms) {
+    final s = ms ~/ 1000;
+    final m = s ~/ 60;
+    final sec = s % 60;
+    return '$m:${sec.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildTabBar() {
+    return Container(
+      height: 52,
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.white12)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: List.generate(_categoryLabels.length, (i) {
+            final selected = _panelVisible && i == _selectedTab;
+            return GestureDetector(
+              onTap: () => _openTab(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 6),
+                decoration: BoxDecoration(
+                  color: selected ? Colors.white.withValues(alpha: 0.12) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(50),
+                  border: Border.all(color: selected ? Colors.white54 : Colors.white12),
+                ),
+                child: Text(
+                  _categoryLabels[i],
+                  style: TextStyle(
+                    color: selected ? Colors.white : Colors.white38,
+                    fontSize: 15,
+                    fontWeight: selected ? FontWeight.w500 : FontWeight.w300,
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPanel() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1421),
+        border: const Border(left: BorderSide(color: Colors.white12)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 32),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Panel header
+          Container(
+            height: 52,
+            padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.white10)),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  _categoryLabels[_selectedTab],
+                  style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 22),
+                  onPressed: _closePanel,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+          // List
+          Expanded(child: _buildPanelContent()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPanelContent() {
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 1.5),
+      );
+    }
+    if (_items.isEmpty) {
+      return Center(
+        child: Text(
+          'No results',
+          style: TextStyle(color: Colors.white24, fontSize: 15, fontWeight: FontWeight.w300),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: _items.length,
+      itemBuilder: (_, i) => _BrowsePanelItem(
+        item: _items[i],
+        onTap: () => _onItemTap(_items[i]),
+      ),
+    );
+  }
+}
+
+class _BrowsePanelItem extends StatelessWidget {
+  final BrowseItem item;
+  final VoidCallback onTap;
+  const _BrowsePanelItem({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 72,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: Colors.white10)),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: item.thumbnail != null
+                  ? CachedNetworkImage(
+                      imageUrl: item.thumbnail!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _placeholder(),
+                    )
+                  : _placeholder(),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    item.title,
+                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w400),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (item.subtitle != null && item.subtitle!.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      item.subtitle!,
+                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (item.canPlay)
+              const Padding(
+                padding: EdgeInsets.only(left: 8),
+                child: Icon(Icons.play_circle_outline_rounded, color: Colors.white24, size: 22),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _placeholder() => Container(
+    width: 56,
+    height: 56,
+    color: Colors.white10,
+    child: const Icon(Icons.music_note_rounded, color: Colors.white24, size: 24),
   );
 }
 

@@ -212,6 +212,50 @@ class AlarmData {
   }
 }
 
+class BrowseItem {
+  final String title;
+  final String? subtitle;
+  final String? thumbnail;
+  final String mediaContentId;
+  final String mediaContentType;
+  final bool canPlay;
+  final bool canExpand;
+
+  const BrowseItem({
+    required this.title,
+    this.subtitle,
+    this.thumbnail,
+    required this.mediaContentId,
+    required this.mediaContentType,
+    this.canPlay = false,
+    this.canExpand = false,
+  });
+
+  factory BrowseItem.fromJson(Map<String, dynamic> json) => BrowseItem(
+    title: json['title'] as String? ?? '',
+    subtitle: json['subtitle'] as String?,
+    thumbnail: json['thumbnail'] as String?,
+    mediaContentId: json['media_content_id'] as String? ?? '',
+    mediaContentType: json['media_content_type'] as String? ?? '',
+    canPlay: json['can_play'] as bool? ?? false,
+    canExpand: json['can_expand'] as bool? ?? false,
+  );
+}
+
+class BrowseResult {
+  final String category;
+  final List<BrowseItem> items;
+
+  const BrowseResult({required this.category, required this.items});
+
+  factory BrowseResult.fromJson(Map<String, dynamic> json) => BrowseResult(
+    category: json['category'] as String? ?? '',
+    items: (json['items'] as List? ?? [])
+        .map((i) => BrowseItem.fromJson(i as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
 class DisplayState {
   final String wakeWord;
   final String wakeWordSensitivity; // 'low' | 'medium' | 'high'

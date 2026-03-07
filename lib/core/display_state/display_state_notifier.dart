@@ -92,6 +92,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   final _openCameraController = StreamController<CameraData>.broadcast();
   Stream<CameraData> get openCameraStream => _openCameraController.stream;
 
+  final _browseResultController = StreamController<BrowseResult>.broadcast();
+  Stream<BrowseResult> get browseResultStream => _browseResultController.stream;
+
   void setFocusedCamera(String? id) {
     _focusedCamera = id;
     _pushState();
@@ -332,6 +335,10 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         timerService.stopHaAlarm();
       }
     }
+    if (payload.containsKey('browse_result')) {
+      final br = payload['browse_result'] as Map<String, dynamic>;
+      _browseResultController.add(BrowseResult.fromJson(br));
+    }
     if (payload.containsKey('voice_response')) {
       final vr = payload['voice_response'] as Map<String, dynamic>;
       final text = vr['text'] as String? ?? '';
@@ -405,11 +412,27 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         _pushState();
       case 'next':
       case 'previous':
+      case 'shuffle':
         _ref.read(displayServerProvider).sendEvent({
           'event': 'media_command',
           'command': command,
         });
     }
+  }
+
+  void sendBrowseRequest(String category) {
+    _ref.read(displayServerProvider).sendEvent({
+      'event': 'browse_media',
+      'category': category,
+    });
+  }
+
+  void sendPlayMediaItem(String mediaContentId, String mediaContentType) {
+    _ref.read(displayServerProvider).sendEvent({
+      'event': 'play_media_item',
+      'media_content_id': mediaContentId,
+      'media_content_type': mediaContentType,
+    });
   }
 
   void recordWakeWordDetection() {
@@ -455,6 +478,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _notificationController.close();
     _focusedCameraController.close();
     _openCameraController.close();
+    _browseResultController.close();
     super.dispose();
   }
 }
