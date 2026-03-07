@@ -68,17 +68,30 @@ User taps play/pause in NowPlayingStrip → DisplayStateNotifier.sendMediaComman
   → play/pause/stop: MediaPlayerService acts locally; state flows back to HA via heartbeat
   → next/previous/shuffle: DisplayServer.sendEvent({event: media_command, command}) → HA forwards to MA entity if configured
 
-User taps album art / track info in NowPlayingStrip → showDialog → _MusicScreen
+User taps album art / track info in NowPlayingStrip → setAmbientMode('music') → crossfades to music display mode
+  (NowPlayingStrip only visible in clock mode)
+
+User in music display mode: _MusicScreen(isDisplayMode: true) rendered in _buildModeContent
   → initState subscribes to browseResultStream
   → user taps tab → sendBrowseRequest(category) → HA browses MA root then category → browse_result command
   → applyCommand() handles browse_result → pushes to browseResultStream → _MusicScreen updates panel
-  → user taps item → sendPlayMediaItem(id, type) → HA calls media_player.play_media on MA entity
+  → user taps item → sendPlayMediaItem(id, type) → HA calls media_player.play_media on MA entity → closes panel
+
+HA sends shuffle_enabled → applyCommand() → state.shuffleEnabled updated → shuffle icon highlights
+  (also sent after shuffle toggle so icon responds immediately)
+
+Media pauses or stops → _musicInactiveTimer starts (5 min)
+  → on fire: ambientMode reverts to 'clock', mediaTrack cleared → strip hides, music mode exits
+  → cancelled on play/play_media/buffering
+
+Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev in ['clock','weather','cameras','music'])
+  → HA Display Mode entity updates automatically via broadcastState
 ```
 
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?` |
+| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled` |
 | `MediaPlayerState` | enum: `idle / buffering / playing / paused`                                    |
 | `MediaTrack`    | `title`, `artist?`, `album?`, `artUrl?`, `durationMs`, `positionMs`; `withPosition(ms)` for updates |
 | `BrowseItem`    | `title`, `subtitle?`, `thumbnail?`, `mediaContentId`, `mediaContentType`, `canPlay`, `canExpand` |

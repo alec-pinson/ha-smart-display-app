@@ -82,6 +82,8 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   String? _focusedCamera;
   StreamSubscription? _mediaStatusSub;
   Timer? _mediaIdleTimer;
+  Timer? _musicInactiveTimer;
+  static const _musicInactiveTimeout = Duration(minutes: 5);
 
   final _notificationController = StreamController<NotificationData>.broadcast();
   Stream<NotificationData> get notificationStream => _notificationController.stream;
@@ -132,6 +134,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         _mediaIdleTimer = null;
         state = state.copyWith(mediaState: MediaPlayerState.idle);
         _pushState();
+        _startMusicInactiveTimer();
       });
     } else {
       _mediaIdleTimer?.cancel();
@@ -141,7 +144,33 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         mediaTrack: state.mediaTrack?.withPosition(status.positionMs),
       );
       _pushState();
+      if (status.state == MediaPlayerState.playing || status.state == MediaPlayerState.buffering) {
+        _cancelMusicInactiveTimer();
+      } else if (status.state == MediaPlayerState.paused) {
+        _startMusicInactiveTimer();
+      }
     }
+  }
+
+  void _startMusicInactiveTimer() {
+    _musicInactiveTimer?.cancel();
+    _musicInactiveTimer = Timer(_musicInactiveTimeout, _onMusicInactive);
+  }
+
+  void _cancelMusicInactiveTimer() {
+    _musicInactiveTimer?.cancel();
+    _musicInactiveTimer = null;
+  }
+
+  void _onMusicInactive() {
+    _musicInactiveTimer = null;
+    var newState = state;
+    if (newState.ambientMode == 'music') {
+      newState = newState.copyWith(ambientMode: 'clock');
+    }
+    newState = newState.copyWith(clearMediaTrack: true, mediaState: MediaPlayerState.idle);
+    state = newState;
+    _pushState();
   }
 
   void _startHeartbeat() {
@@ -277,14 +306,18 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
           .toList();
       newState = newState.copyWith(alarms: alarms);
     }
+    if (payload.containsKey('shuffle_enabled')) {
+      newState = newState.copyWith(shuffleEnabled: payload['shuffle_enabled'] as bool);
+    }
     if (payload.containsKey('media_track')) {
       final mt = payload['media_track'] as Map<String, dynamic>;
       newState = newState.copyWith(mediaTrack: MediaTrack.fromJson(mt));
     }
     if (payload.containsKey('play_media')) {
-      // Cancel any pending idle timer — a new track is starting
+      // Cancel any pending idle/inactive timers — a new track is starting
       _mediaIdleTimer?.cancel();
       _mediaIdleTimer = null;
+      _cancelMusicInactiveTimer();
       final pm = payload['play_media'] as Map<String, dynamic>;
       final url = pm['url'] as String;
       final title = pm['title'] as String? ?? '';
@@ -313,6 +346,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         case 'play':
           _mediaIdleTimer?.cancel();
           _mediaIdleTimer = null;
+          _cancelMusicInactiveTimer();
           unawaited(svc.resume());
         case 'stop':
           unawaited(svc.stop());
@@ -420,6 +454,11 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     }
   }
 
+  void setAmbientMode(String mode) {
+    state = state.copyWith(ambientMode: mode);
+    _pushState();
+  }
+
   void sendBrowseRequest(String category) {
     _ref.read(displayServerProvider).sendEvent({
       'event': 'browse_media',
@@ -475,6 +514,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _heartbeatTimer?.cancel();
     _mediaStatusSub?.cancel();
     _mediaIdleTimer?.cancel();
+    _musicInactiveTimer?.cancel();
     _notificationController.close();
     _focusedCameraController.close();
     _openCameraController.close();

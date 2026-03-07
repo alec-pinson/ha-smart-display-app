@@ -555,10 +555,26 @@ class _NormalOverlay extends ConsumerWidget {
   final DisplayState state;
   const _NormalOverlay({super.key, required this.state});
 
+  static const _modes = ['clock', 'weather', 'cameras', 'music'];
+
+  void _onSwipe(DragEndDetails details, WidgetRef ref) {
+    final v = details.primaryVelocity;
+    if (v == null || v.abs() < 300) return;
+    final current = _modes.indexOf(state.ambientMode);
+    if (current == -1) return;
+    final next = v < 0
+        ? (current + 1) % _modes.length        // swipe left → next
+        : (current - 1 + _modes.length) % _modes.length; // swipe right → previous
+    ref.read(displayStateProvider.notifier).setAmbientMode(_modes[next]);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isClockMode = state.ambientMode == 'clock';
-    return Stack(
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: (details) => _onSwipe(details, ref),
+      child: Stack(
       children: [
         // Mode content — always fills the screen so Stack never collapses
         Positioned.fill(
@@ -599,8 +615,8 @@ class _NormalOverlay extends ConsumerWidget {
             child: _TimerPanel(timers: state.timers),
           ),
 
-        // Now playing strip — bottom-left when media is active
-        if (state.mediaState != MediaPlayerState.idle && state.mediaTrack != null)
+        // Now playing strip — bottom-left in clock mode only
+        if (state.ambientMode == 'clock' && state.mediaState != MediaPlayerState.idle && state.mediaTrack != null)
           Positioned(
             bottom: 32,
             left: 32,
@@ -610,16 +626,13 @@ class _NormalOverlay extends ConsumerWidget {
                 mediaState: state.mediaState,
                 track: state.mediaTrack!,
                 notifier: ref.read(displayStateProvider.notifier),
-                onTapInfo: () => showDialog(
-                  context: context,
-                  barrierColor: Colors.black,
-                  builder: (_) => const _MusicScreen(),
-                ),
+                onTapInfo: () => ref.read(displayStateProvider.notifier).setAmbientMode('music'),
               ),
             ),
           ),
       ],
-    );
+      ),  // Stack
+    );   // GestureDetector
   }
 
   Widget _buildModeContent(DisplayState state, BuildContext context, WidgetRef ref) {
@@ -646,6 +659,8 @@ class _NormalOverlay extends ConsumerWidget {
             ).then((_) => notifier.setFocusedCamera(null));
           },
         );
+      case 'music':
+        return const _MusicScreen(key: ValueKey('music'), isDisplayMode: true);
       default:
         return const SizedBox.expand(key: ValueKey('clock'));
     }
@@ -1294,7 +1309,8 @@ class _NowPlayingStrip extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _MusicScreen extends ConsumerStatefulWidget {
-  const _MusicScreen();
+  final bool isDisplayMode;
+  const _MusicScreen({super.key, this.isDisplayMode = false});
 
   @override
   ConsumerState<_MusicScreen> createState() => _MusicScreenState();
@@ -1380,7 +1396,11 @@ class _MusicScreenState extends ConsumerState<_MusicScreen>
       ref.read(displayStateProvider.notifier).sendPlayMediaItem(
         item.mediaContentId, item.mediaContentType,
       );
-      Navigator.of(context).pop();
+      if (!widget.isDisplayMode) {
+        Navigator.of(context).pop();
+      } else {
+        _closePanel();
+      }
     }
   }
 
@@ -1391,46 +1411,49 @@ class _MusicScreenState extends ConsumerState<_MusicScreen>
     final isPlaying = state.mediaState == MediaPlayerState.playing;
     final notifier = ref.read(displayStateProvider.notifier);
 
-    return Dialog.fullscreen(
-      backgroundColor: const Color(0xFF060B14),
-      child: Stack(
-        children: [
-          // Main content
-          Column(
-            children: [
-              _buildHeader(context),
-              Expanded(child: _buildNowPlaying(track, isPlaying, notifier)),
-              _buildTabBar(),
-            ],
-          ),
-          // Scrim — only when panel is visible
-          if (_panelVisible)
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _scrimOpacity,
-                builder: (_, __) => GestureDetector(
-                  onTap: _closePanel,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    color: Colors.black.withValues(alpha: _scrimOpacity.value),
-                  ),
+    final content = Stack(
+      children: [
+        // Main content
+        Column(
+          children: [
+            if (!widget.isDisplayMode) _buildHeader(context),
+            Expanded(child: _buildNowPlaying(track, isPlaying, state.shuffleEnabled, notifier)),
+            _buildTabBar(),
+          ],
+        ),
+        // Scrim — only when panel is visible
+        if (_panelVisible)
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _scrimOpacity,
+              builder: (_, __) => GestureDetector(
+                onTap: _closePanel,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  color: Colors.black.withValues(alpha: _scrimOpacity.value),
                 ),
               ),
             ),
-          // Slide-in panel from right
-          if (_panelVisible)
-            Positioned(
-              right: 0,
-              top: 52,   // below header
-              bottom: 52, // above tab bar
-              width: 500,
-              child: SlideTransition(
-                position: _panelSlide,
-                child: _buildPanel(),
-              ),
+          ),
+        // Slide-in panel from right
+        if (_panelVisible)
+          Positioned(
+            right: 0,
+            top: widget.isDisplayMode ? 0 : 52,   // no header offset in display mode
+            bottom: 52, // above tab bar
+            width: 500,
+            child: SlideTransition(
+              position: _panelSlide,
+              child: _buildPanel(),
             ),
-        ],
-      ),
+          ),
+      ],
+    );
+
+    if (widget.isDisplayMode) return content;
+    return Dialog.fullscreen(
+      backgroundColor: const Color(0xFF060B14),
+      child: content,
     );
   }
 
@@ -1453,7 +1476,7 @@ class _MusicScreenState extends ConsumerState<_MusicScreen>
     );
   }
 
-  Widget _buildNowPlaying(MediaTrack? track, bool isPlaying, DisplayStateNotifier notifier) {
+  Widget _buildNowPlaying(MediaTrack? track, bool isPlaying, bool shuffleEnabled, DisplayStateNotifier notifier) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(48, 24, 48, 24),
       child: Row(
@@ -1566,9 +1589,9 @@ class _MusicScreenState extends ConsumerState<_MusicScreen>
                     GestureDetector(
                       onTap: () => notifier.sendMediaCommand('shuffle'),
                       behavior: HitTestBehavior.opaque,
-                      child: const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Icon(Icons.shuffle_rounded, color: Colors.white38, size: 30),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Icon(Icons.shuffle_rounded, color: shuffleEnabled ? Colors.white : Colors.white38, size: 30),
                       ),
                     ),
                   ],

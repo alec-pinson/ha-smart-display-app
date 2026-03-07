@@ -277,6 +277,7 @@ class DisplayState {
   final List<CameraData> cameras;
   final MediaPlayerState mediaState;
   final MediaTrack? mediaTrack;
+  final bool shuffleEnabled;
 
   const DisplayState({
     required this.wakeWord,
@@ -299,6 +300,7 @@ class DisplayState {
     this.cameras = const [],
     this.mediaState = MediaPlayerState.idle,
     this.mediaTrack,
+    this.shuffleEnabled = false,
   });
 
   DisplayState copyWith({
@@ -323,6 +325,7 @@ class DisplayState {
     MediaPlayerState? mediaState,
     MediaTrack? mediaTrack,
     bool clearMediaTrack = false,
+    bool? shuffleEnabled,
   }) {
     return DisplayState(
       wakeWord: wakeWord ?? this.wakeWord,
@@ -345,6 +348,7 @@ class DisplayState {
       cameras: cameras ?? this.cameras,
       mediaState: mediaState ?? this.mediaState,
       mediaTrack: clearMediaTrack ? null : (mediaTrack ?? this.mediaTrack),
+      shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
     );
   }
 
