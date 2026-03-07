@@ -8,7 +8,9 @@ import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
 import 'package:record/record.dart';
 
+import '../display_state/display_state.dart';
 import '../display_state/display_state_notifier.dart';
+import '../media/media_player_service.dart';
 import '../server/display_server.dart';
 
 final _log = Logger();
@@ -28,6 +30,7 @@ class VoiceAssistantService {
   final _ttsPlayer = AudioPlayer();
   bool _isRecordingCommand = false;
   Timer? _processingTimeout;
+  bool _musicWasPlaying = false;
 
   // VAD config
   static const _maxDurationMs = 10000;
@@ -55,6 +58,14 @@ class VoiceAssistantService {
   Future<void> onWakeWordDetected() async {
     if (_state != VoiceAssistantState.idle) return;
     _setState(VoiceAssistantState.detected);
+
+    // Pause music if playing — will resume after voice response unless a stop command came through
+    final mediaSvc = _ref.read(mediaPlayerServiceProvider);
+    final mediaState = _ref.read(displayStateProvider).mediaState;
+    _musicWasPlaying = mediaState == MediaPlayerState.playing || mediaState == MediaPlayerState.buffering;
+    if (_musicWasPlaying) {
+      await mediaSvc.pause();
+    }
 
     // Brief pause so the wake-word utterance finishes before we start recording
     await Future.delayed(const Duration(milliseconds: 400));
@@ -109,8 +120,18 @@ class VoiceAssistantService {
   }
 
   void _resetToIdle() {
+    // Set idle first — AmbientScreen observes this and calls wakeWordSvc.resume(),
+    // which sets up cooldown frames before detection restarts.
     _setState(VoiceAssistantState.idle);
-    // WakeWordService.resume() is called by AmbientScreen when it observes idle state
+    // Resume music after a delay so the native wake word cooldown is established
+    // before music audio hits the mic (prevents false re-triggering).
+    // MediaPlayerService.resume() is a no-op if state is idle (e.g. "stop music" command).
+    if (_musicWasPlaying) {
+      _musicWasPlaying = false;
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        _ref.read(mediaPlayerServiceProvider).resume();
+      });
+    }
   }
 
   Future<Uint8List?> _recordCommand() async {

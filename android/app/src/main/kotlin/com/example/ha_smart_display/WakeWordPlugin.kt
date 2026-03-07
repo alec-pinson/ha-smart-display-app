@@ -136,7 +136,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                     probabilityWindow.clear()
                     frameBuffer.clear()
                     peakProbability = 0f
-                    cooldownFrames = slidingWindowSize * 2
+                    cooldownFrames = slidingWindowSize * 5
                     microFrontend?.reset()
                     paused = false
                     Log.d(TAG, "resume: unpaused after audio went quiet")
