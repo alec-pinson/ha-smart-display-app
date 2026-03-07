@@ -2,8 +2,10 @@ package com.example.ha_smart_display
 
 import android.content.Context
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -52,6 +54,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
     // Runtime state
     private var audioRecord: AudioRecord? = null
+    private var echoCanceller: AcousticEchoCanceler? = null
     private var audioThread: HandlerThread? = null
     private var audioHandler: Handler? = null
     private var microFrontend: MicroFrontend? = null
@@ -64,6 +67,13 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private var outputScale = 0.00390625f
     private var cooldownFrames = 0
     private var loggedSampleFeatures = false
+
+    // Peak probability tracked since last reset (including during cooldown frames).
+    // Detection requires BOTH avg >= probabilityCutoff AND peakProbability >= PEAK_THRESHOLD.
+    // Real wake-word audio always produces a strong spike early (typically 0.7-0.9); false
+    // positives from room audio/echo only reach ~0.36 — well below the threshold.
+    private var peakProbability = 0f
+    private val PEAK_THRESHOLD = 0.5f
 
     @Volatile private var running = false
     @Volatile private var paused = false
@@ -103,13 +113,34 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
             "stop"   -> { stopAll();          result.success(null) }
             "pause"  -> { paused = true;      result.success(null) }
             "resume" -> {
-                paused = false
-                probabilityWindow.clear()
-                frameBuffer.clear()
-                cooldownFrames = slidingWindowSize * 2
-                // Reset microfrontend to clear any audio state accumulated during voice recording
-                microFrontend?.reset()
+                // Respond immediately so Dart isn't blocked.
                 result.success(null)
+                // Poll AudioManager.isMusicActive() until speaker output stops before
+                // unpausing detection. This prevents TTS audio still draining through
+                // the AudioTrack buffer from re-triggering the wake word.
+                // Runs on a new thread so it doesn't block the MethodChannel handler
+                // or the audio loop thread.
+                Thread {
+                    val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    val deadline = System.currentTimeMillis() + 8000L
+                    while (System.currentTimeMillis() < deadline && running) {
+                        if (!am.isMusicActive) break
+                        Thread.sleep(100)
+                    }
+                    if (!running) return@Thread
+                    // Extra 500ms for room echo decay after speaker goes quiet.
+                    Thread.sleep(500)
+                    if (!running) return@Thread
+                    // All writes before the volatile paused=false are visible to the
+                    // audio thread when it next reads paused (JMM happens-before).
+                    probabilityWindow.clear()
+                    frameBuffer.clear()
+                    peakProbability = 0f
+                    cooldownFrames = slidingWindowSize * 2
+                    microFrontend?.reset()
+                    paused = false
+                    Log.d(TAG, "resume: unpaused after audio went quiet")
+                }.start()
             }
             else -> result.notImplemented()
         }
@@ -161,7 +192,8 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         microFrontend = MicroFrontend(SAMPLE_RATE, featureStepMs)
         frameBuffer.clear()
         probabilityWindow.clear()
-        cooldownFrames = 0
+        peakProbability = 0f
+        cooldownFrames = slidingWindowSize * 2  // discard initial PCAN warmup frames
 
         // Set up AudioRecord
         val samplesPerStep = SAMPLE_RATE * featureStepMs / 1000
@@ -183,6 +215,18 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
             return
         }
         audioRecord = record
+
+        // Attach acoustic echo canceller so TTS speaker audio isn't picked up by the mic
+        echoCanceller = if (AcousticEchoCanceler.isAvailable()) {
+            AcousticEchoCanceler.create(record.audioSessionId)?.also { aec ->
+                aec.enabled = true
+                Log.d(TAG, "startAll: AcousticEchoCanceler attached (enabled=${aec.enabled})")
+            }
+        } else {
+            Log.d(TAG, "startAll: AcousticEchoCanceler not available on this device")
+            null
+        }
+
         Log.d(TAG, "startAll: AudioRecord initialized OK")
 
         running = true
@@ -198,6 +242,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
     private fun stopAll() {
         running = false
+        echoCanceller?.release(); echoCanceller = null
         audioRecord?.let { try { it.stop() } catch (_: Exception) {}; it.release() }
         audioRecord = null
         audioThread?.quitSafely(); audioThread = null; audioHandler = null
@@ -235,6 +280,12 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
     private fun runInference(batch: List<FloatArray>): Float {
         val interp = interpreter ?: return 0f
+
+        // Skip near-zero feature batches — the model outputs spuriously high probabilities
+        // (~0.93) for all-zero inputs (PCAN-suppressed silence or post-reset warmup frames).
+        // Real wake word audio always has significant non-zero mel features.
+        val maxFeature = batch.maxOf { frame -> frame.maxOrNull() ?: 0f }
+        if (maxFeature < 1.0f) return 0f
 
         // Fill INT8 input ByteBuffer [1 × 3 × 40]
         val inputBuf = ByteBuffer.allocateDirect(FEATURE_STRIDE * 40)
@@ -288,6 +339,11 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private var _featureLogCounter = 0
 
     private fun processDetection(probability: Float) {
+        // Track peak even during cooldown — the strongest "alexa" spike typically
+        // occurs in the first few frames (while PCAN is still adapting), which land
+        // inside the cooldown window and would otherwise be invisible to the detector.
+        peakProbability = maxOf(peakProbability, probability)
+
         if (cooldownFrames > 0) { cooldownFrames--; return }
 
         probabilityWindow.add(probability)
@@ -306,15 +362,21 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
         if (probabilityWindow.size >= slidingWindowSize) {
             val avg = probabilityWindow.sum() / slidingWindowSize
-            if (avg >= probabilityCutoff) {
-                Log.i(TAG, "DETECTED! avg=$avg")
+            if (avg >= probabilityCutoff && peakProbability >= PEAK_THRESHOLD) {
+                Log.i(TAG, "DETECTED! avg=$avg peak=${"%.4f".format(peakProbability)}")
+                // Pause immediately on the native side so the audio loop stops processing
+                // before the Dart pause() round-trip arrives. Without this, TTS audio
+                // from the speaker can trigger a second detection during the round-trip.
+                paused = true
+                peakProbability = 0f
                 probabilityWindow.clear()
-                cooldownFrames = slidingWindowSize * 2
                 // Reset microfrontend so residual wake-word audio in PCAN/noise-reduction
                 // state doesn't immediately re-trigger detection
                 microFrontend?.reset()
                 frameBuffer.clear()
                 mainHandler.post { eventSink?.success("detected") }
+            } else if (avg >= probabilityCutoff) {
+                Log.d(TAG, "avg=${"%.4f".format(avg)} >= cutoff but peak=${"%.4f".format(peakProbability)} < $PEAK_THRESHOLD — suppressed")
             }
         }
     }

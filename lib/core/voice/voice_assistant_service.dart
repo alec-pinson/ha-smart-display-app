@@ -91,7 +91,18 @@ class VoiceAssistantService {
   Future<void> _playTts(String url) async {
     try {
       await _ttsPlayer.setUrl(url);
+      // Subscribe before play() to avoid missing the completed event.
+      // play() alone isn't always sufficient — it can return before audio finishes.
+      final completedFuture = _ttsPlayer.processingStateStream
+          .firstWhere((s) => s == ProcessingState.completed)
+          .timeout(const Duration(seconds: 30), onTimeout: () => ProcessingState.idle);
       await _ttsPlayer.play();
+      await completedFuture;
+      // Small delay after ProcessingState.completed to ensure ExoPlayer has fully
+      // handed off audio to AudioTrack. The native WakeWordPlugin.resume() then
+      // polls AudioManager.isMusicActive() and waits until hardware output stops
+      // before unpausing detection — so we don't need a large fixed delay here.
+      await Future.delayed(const Duration(milliseconds: 500));
     } catch (e) {
       _log.w('VoiceAssistant: TTS playback error: $e');
     }
