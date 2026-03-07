@@ -277,6 +277,7 @@ class BrowseResult {
 class DisplayState {
   final String wakeWord;
   final String wakeWordSensitivity; // 'low' | 'medium' | 'high'
+  final String vadSensitivity; // 'default' | 'relaxed' | 'aggressive'
   final String ambientMode;
   final bool ambientActive;
   final int brightness;
@@ -302,6 +303,7 @@ class DisplayState {
   const DisplayState({
     required this.wakeWord,
     this.wakeWordSensitivity = 'medium',
+    this.vadSensitivity = 'default',
     required this.ambientMode,
     required this.ambientActive,
     required this.brightness,
@@ -328,6 +330,7 @@ class DisplayState {
   DisplayState copyWith({
     String? wakeWord,
     String? wakeWordSensitivity,
+    String? vadSensitivity,
     String? ambientMode,
     bool? ambientActive,
     int? brightness,
@@ -354,6 +357,7 @@ class DisplayState {
     return DisplayState(
       wakeWord: wakeWord ?? this.wakeWord,
       wakeWordSensitivity: wakeWordSensitivity ?? this.wakeWordSensitivity,
+      vadSensitivity: vadSensitivity ?? this.vadSensitivity,
       ambientMode: ambientMode ?? this.ambientMode,
       ambientActive: ambientActive ?? this.ambientActive,
       brightness: brightness ?? this.brightness,
@@ -381,6 +385,7 @@ class DisplayState {
   Map<String, dynamic> toJson() => {
         'wake_word': wakeWord,
         'wake_word_sensitivity': wakeWordSensitivity,
+        'vad_sensitivity': vadSensitivity,
         'ambient_mode': ambientMode,
         'ambient_active': ambientActive,
         'brightness': brightness,

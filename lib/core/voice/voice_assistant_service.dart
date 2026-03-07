@@ -8,6 +8,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
 import 'package:record/record.dart';
 
+import '../display_state/display_state_notifier.dart';
 import '../server/display_server.dart';
 
 final _log = Logger();
@@ -30,8 +31,24 @@ class VoiceAssistantService {
 
   // VAD config
   static const _maxDurationMs = 10000;
-  static const _silenceThresholdMs = 1500;
-  static const _energyThreshold = 300.0; // RMS level below which is "silence"
+  static const _calibrationChunks = 20; // 200ms of noise floor sampling
+  static const _minEnergyThreshold = 100.0; // floor so very quiet rooms still work
+
+  // Returns (silenceThresholdMs, noiseMultiplier) for the current vad_sensitivity.
+  // The energy threshold is set dynamically as: max(noiseFloor * multiplier, _minEnergyThreshold).
+  // Higher multiplier = needs louder signal above ambient noise to register as speech,
+  // so noise fluctuations don't reset the silence counter.
+  (int, double) get _vadParams {
+    final sensitivity = _ref.read(displayStateProvider).vadSensitivity;
+    switch (sensitivity) {
+      case 'relaxed':
+        return (2500, 1.5);
+      case 'aggressive':
+        return (400, 1.5);
+      default: // 'default'
+        return (1500, 1.5);
+    }
+  }
 
   VoiceAssistantService(this._ref);
 
@@ -90,10 +107,18 @@ class VoiceAssistantService {
     if (_isRecordingCommand) return null;
     _isRecordingCommand = true;
 
+    final (silenceThresholdMs, noiseMultiplier) = _vadParams;
     final collectedChunks = <Uint8List>[];
     int silenceMs = 0;
     int totalMs = 0;
     bool started = false;
+
+    // Calibration: measure noise floor over the first _calibrationChunks chunks,
+    // then set threshold dynamically so it adapts to the current room conditions.
+    int calibrationCount = 0;
+    double calibrationRmsSum = 0;
+    bool calibrated = false;
+    double energyThreshold = _minEnergyThreshold;
 
     try {
       final stream = await _recorder.startStream(const RecordConfig(
@@ -121,16 +146,30 @@ class VoiceAssistantService {
           collectedChunks.add(chunk);
           totalMs += chunkMs;
 
-          // Simple energy-based VAD
           final rms = _computeRms(chunk);
-          if (rms > _energyThreshold) {
+
+          // Calibration phase: sample noise floor before VAD starts
+          if (!calibrated) {
+            calibrationRmsSum += rms;
+            calibrationCount++;
+            if (calibrationCount >= _calibrationChunks) {
+              final noiseFloor = calibrationRmsSum / calibrationCount;
+              energyThreshold = math.max(noiseFloor * noiseMultiplier, _minEnergyThreshold);
+              calibrated = true;
+              _log.d('VoiceAssistant: noise floor=${noiseFloor.toStringAsFixed(1)}, threshold=${energyThreshold.toStringAsFixed(1)}');
+            }
+            continue;
+          }
+
+          // Energy-based VAD
+          if (rms > energyThreshold) {
             started = true;
             silenceMs = 0;
           } else if (started) {
             silenceMs += chunkMs;
           }
 
-          if ((started && silenceMs >= _silenceThresholdMs) ||
+          if ((started && silenceMs >= silenceThresholdMs) ||
               totalMs >= _maxDurationMs) {
             sub.cancel();
             if (!completer.isCompleted) completer.complete();

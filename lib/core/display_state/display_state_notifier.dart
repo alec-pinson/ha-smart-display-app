@@ -18,6 +18,7 @@ const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
 const _storage = FlutterSecureStorage(aOptions: _androidOptions);
 const _wakeWordKey = 'wake_word';
 const _wakeWordSensitivityKey = 'wake_word_sensitivity';
+const _vadSensitivityKey = 'vad_sensitivity';
 const _brightnessKey = 'brightness';
 const _autoBrightnessKey = 'auto_brightness';
 
@@ -27,6 +28,10 @@ Future<String> loadPersistedWakeWord() async {
 
 Future<String> loadPersistedWakeWordSensitivity() async {
   return await _storage.read(key: _wakeWordSensitivityKey) ?? 'medium';
+}
+
+Future<String> loadPersistedVadSensitivity() async {
+  return await _storage.read(key: _vadSensitivityKey) ?? 'default';
 }
 
 Future<int> loadPersistedBrightness() async {
@@ -102,10 +107,11 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _pushState();
   }
 
-  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', int initialVolume = 50, int initialBrightness = 128, bool initialAutoBrightness = false})
+  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', String initialVadSensitivity = 'default', int initialVolume = 50, int initialBrightness = 128, bool initialAutoBrightness = false})
       : super(DisplayState(
           wakeWord: initialWakeWord,
           wakeWordSensitivity: initialWakeWordSensitivity,
+          vadSensitivity: initialVadSensitivity,
           ambientMode: 'clock',
           ambientActive: false,
           brightness: initialBrightness,
@@ -202,6 +208,11 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       final sensitivity = payload['wake_word_sensitivity'] as String;
       newState = newState.copyWith(wakeWordSensitivity: sensitivity);
       _storage.write(key: _wakeWordSensitivityKey, value: sensitivity);
+    }
+    if (payload.containsKey('vad_sensitivity')) {
+      final vadSensitivity = payload['vad_sensitivity'] as String;
+      newState = newState.copyWith(vadSensitivity: vadSensitivity);
+      _storage.write(key: _vadSensitivityKey, value: vadSensitivity);
     }
     if (payload.containsKey('ambient_mode')) {
       newState = newState.copyWith(ambientMode: payload['ambient_mode'] as String);

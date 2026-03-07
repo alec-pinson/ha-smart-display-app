@@ -25,7 +25,7 @@ adb -s G0918309042301JB install -r build/app/outputs/flutter-apk/app-debug.apk
 | `deviceIdProvider`           | `core/device/device_id_service.dart`             | FutureProvider<String> — persistent UUID                            |
 | `pairingProvider`            | `core/pairing/pairing_service.dart`              | StateNotifierProvider<PairingNotifier, PairingState>                |
 | `displayServerProvider`      | `core/server/display_server.dart`                | Provider<DisplayServer> — WebSocket server singleton                |
-| `displayStateProvider`       | `core/display_state/display_state_notifier.dart` | StateNotifierProvider<DisplayStateNotifier, DisplayState>; initialised with persisted wake word + sensitivity + brightness |
+| `displayStateProvider`       | `core/display_state/display_state_notifier.dart` | StateNotifierProvider<DisplayStateNotifier, DisplayState>; initialised with persisted wake word + sensitivity + vad_sensitivity + brightness |
 | `timerServiceProvider`       | `core/timer/timer_service.dart`                  | Provider<TimerService> — expiry watcher + audio                     |
 | `wakeWordServiceProvider`    | `core/wake_word/wake_word_service.dart`          | Provider<WakeWordService> — native wake word pipeline; detectionStream |
 | `voiceAssistantServiceProvider` | `core/voice/voice_assistant_service.dart`     | Provider<VoiceAssistantService> — record + VAD + send to HA        |
@@ -91,7 +91,7 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled`, `doors`, `motions` |
+| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `vadSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled`, `doors`, `motions` |
 | `MediaPlayerState` | enum: `idle / buffering / playing / paused`                                    |
 | `MediaTrack`    | `title`, `artist?`, `album?`, `artUrl?`, `durationMs`, `positionMs`; `withPosition(ms)` for updates |
 | `BrowseItem`    | `title`, `subtitle?`, `thumbnail?`, `mediaContentId`, `mediaContentType`, `canPlay`, `canExpand` |
@@ -142,7 +142,7 @@ app window brightness directly. No `WRITE_SETTINGS` permission needed.
 ## Secure storage
 `FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true))` is used
 consistently across the codebase. Keys stored: `device_id`, `paired`, `pairing_code`,
-`wake_word`, `wake_word_sensitivity`, `brightness`, `auto_brightness`. Wake word, sensitivity,
+`wake_word`, `wake_word_sensitivity`, `vad_sensitivity`, `brightness`, `auto_brightness`. Wake word, sensitivity,
 brightness, and auto-brightness are loaded in `main()` before the `ProviderContainer` is
 created, and injected via `displayStateProvider.overrideWith()`. Brightness is applied to the
 screen immediately on startup from the persisted value.
