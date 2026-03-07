@@ -449,6 +449,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       case 'stop':
         _mediaIdleTimer?.cancel();
         _mediaIdleTimer = null;
+        _cancelMusicInactiveTimer();
         unawaited(svc.stop());
         state = state.copyWith(mediaState: MediaPlayerState.idle, clearMediaTrack: true);
         _pushState();

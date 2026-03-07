@@ -26,6 +26,7 @@ class VoiceAssistantService {
   final _recorder = AudioRecorder();
   final _ttsPlayer = AudioPlayer();
   bool _isRecordingCommand = false;
+  Timer? _processingTimeout;
 
   // VAD config
   static const _maxDurationMs = 10000;
@@ -53,13 +54,16 @@ class VoiceAssistantService {
     _setState(VoiceAssistantState.processing);
     await _sendToHA(pcmData);
     // HA will reply with voice_response — onResponseReceived() called then.
-    // Add a safety timeout in case HA doesn't reply.
-    Future.delayed(const Duration(seconds: 10), () {
+    // Safety timeout in case HA never replies — cancelled on response or dispose.
+    _processingTimeout?.cancel();
+    _processingTimeout = Timer(const Duration(seconds: 10), () {
       if (_state == VoiceAssistantState.processing) _resetToIdle();
     });
   }
 
   Future<void> onResponseReceived({String? ttsUrl}) async {
+    _processingTimeout?.cancel();
+    _processingTimeout = null;
     // Play TTS before resuming wake word — avoids the TTS audio re-triggering detection
     if (ttsUrl != null && ttsUrl.isNotEmpty) {
       await _playTts(ttsUrl);
@@ -214,6 +218,7 @@ class VoiceAssistantService {
   }
 
   void dispose() {
+    _processingTimeout?.cancel();
     _recorder.dispose();
     _ttsPlayer.dispose();
     _stateController.close();

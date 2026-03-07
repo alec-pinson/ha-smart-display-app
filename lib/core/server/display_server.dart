@@ -61,12 +61,12 @@ class DisplayServer {
       (raw) => _handleMessage(ws, raw as String),
       onDone: () {
         _clients.remove(ws);
-        _clientCountController.add(_clients.length);
+        if (!_clientCountController.isClosed) _clientCountController.add(_clients.length);
         _log.d('DisplayServer: client disconnected');
       },
       onError: (e) {
         _clients.remove(ws);
-        _clientCountController.add(_clients.length);
+        if (!_clientCountController.isClosed) _clientCountController.add(_clients.length);
         _log.w('DisplayServer: client error: $e');
       },
     );

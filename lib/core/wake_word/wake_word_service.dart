@@ -18,10 +18,8 @@ const _modelConfigs = {
 
 // Sensitivity → probability cutoff (sliding window average).
 // Higher sensitivity = lower cutoff = easier to trigger.
-// Calibrated against Echo Show 8 far-field mics with AUDIO_GAIN=128:
-//   "alexa" weak attempt  → best 5-frame avg ~0.25, background → 0.000
-//   "alexa" clear speech  → best 5-frame avg ~0.53
-//   non-alexa speech      → best 5-frame avg ~0.04
+// Calibrated against Echo Show 8 far-field mics (VOICE_RECOGNITION source, no gain):
+//   "alexa" clear speech  → best 5-frame avg ~0.70–0.85, background → 0.000
 const _cutoffBySensitivity = {
   'low':    0.65,
   'medium': 0.35,
@@ -97,9 +95,9 @@ class WakeWordService {
     try { await _methodChannel.invokeMethod('resume'); } catch (_) {}
   }
 
-  Future<void> dispose() async {
-    await stop();
+  void dispose() {
     _detectionController.close();
+    unawaited(stop()); // fire-and-forget; native side cleans up when engine detaches
   }
 
   // Detection stream — AmbientScreen listens and triggers VoiceAssistantService

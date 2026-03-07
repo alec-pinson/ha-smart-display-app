@@ -293,8 +293,8 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         probabilityWindow.add(probability)
         if (probabilityWindow.size > slidingWindowSize) probabilityWindow.removeAt(0)
 
-        // Log probabilities every ~10 frames (~100ms)
-        if (++_logThrottle >= 10) {
+        // Log probabilities every ~50 frames (~500ms) to avoid logcat spam
+        if (++_logThrottle >= 50) {
             _logThrottle = 0
             Log.d(TAG, "prob=${"%.3f".format(probability)} window=${probabilityWindow.map { "%.2f".format(it) }}")
         }
@@ -331,6 +331,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                 afd.declaredLength
             )
         } catch (e: Exception) {
+            Log.e(TAG, "loadModelFromAssets: failed for $wakeWord: $e")
             null
         }
     }
