@@ -269,7 +269,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       );
     }
     if (payload.containsKey('photos')) {
-      final photos = (payload['photos'] as List).cast<String>();
+      final photos = (payload['photos'] as List).map(PhotoItem.fromJson).toList();
       newState = newState.copyWith(photos: photos);
     }
     if (payload.containsKey('cameras')) {

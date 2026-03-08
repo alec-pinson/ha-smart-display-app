@@ -949,7 +949,7 @@ class _ForecastTile extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _AmbientPhotoSlideshow extends StatefulWidget {
-  final List<String> photos;
+  final List<PhotoItem> photos;
   final ImmichConfig? immichConfig;
   final int intervalSeconds;
   final Stream<String>? photoCommandStream;
@@ -1016,20 +1016,69 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
   Widget build(BuildContext context) {
     if (widget.photos.isEmpty) return const SizedBox.shrink();
     final safeIndex = _index.clamp(0, widget.photos.length - 1);
-    final url = widget.photos[safeIndex];
+    final photo = widget.photos[safeIndex];
     final cfg = widget.immichConfig;
-    final isImmich = cfg != null && url.startsWith(cfg.url);
-    return AnimatedSwitcher(
-      duration: const Duration(seconds: 2),
-      child: CachedNetworkImage(
-        key: ValueKey(url),
-        imageUrl: url,
-        httpHeaders: isImmich ? {'x-api-key': cfg.apiKey} : const {},
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        errorWidget: (_, __, ___) => const SizedBox.shrink(),
-      ),
+    final isImmich = cfg != null && photo.url.startsWith(cfg.url);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        AnimatedSwitcher(
+          duration: const Duration(seconds: 2),
+          child: CachedNetworkImage(
+            key: ValueKey(photo.url),
+            imageUrl: photo.url,
+            httpHeaders: isImmich ? {'x-api-key': cfg.apiKey} : const {},
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+        if (photo.album != null || photo.location != null)
+          Positioned(
+            top: 8,
+            right: 52,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 600),
+              child: _PhotoMetadataLabel(
+                key: ValueKey('${photo.album}|${photo.location}'),
+                album: photo.album,
+                location: photo.location,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _PhotoMetadataLabel extends StatelessWidget {
+  final String? album;
+  final String? location;
+  const _PhotoMetadataLabel({super.key, this.album, this.location});
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = <String>[
+      if (album != null) album!,
+      if (location != null) location!,
+    ];
+    if (lines.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < lines.length; i++)
+          Text(
+            lines[i],
+            style: TextStyle(
+              inherit: false,
+              color: i == 0 ? Colors.white : Colors.white70,
+              fontSize: i == 0 ? 13 : 11,
+              fontWeight: i == 0 ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+      ],
     );
   }
 }

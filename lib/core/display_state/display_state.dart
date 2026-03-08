@@ -8,6 +8,23 @@ class ImmichConfig {
   const ImmichConfig({required this.url, required this.apiKey});
 }
 
+class PhotoItem {
+  final String url;
+  final String? album;
+  final String? location;
+  const PhotoItem({required this.url, this.album, this.location});
+
+  factory PhotoItem.fromJson(dynamic json) {
+    if (json is String) return PhotoItem(url: json);
+    final map = json as Map<String, dynamic>;
+    return PhotoItem(
+      url: map['url'] as String,
+      album: map['album'] as String?,
+      location: map['location'] as String?,
+    );
+  }
+}
+
 class MediaTrack {
   final String title;
   final String? artist;
@@ -298,7 +315,7 @@ class DisplayState {
   final ClimateData? climate;
   final List<TimerData> timers;
   final List<AlarmData> alarms;
-  final List<String> photos;
+  final List<PhotoItem> photos;
   final List<CameraData> cameras;
   final MediaPlayerState mediaState;
   final MediaTrack? mediaTrack;
@@ -326,7 +343,7 @@ class DisplayState {
     this.climate,
     this.timers = const [],
     this.alarms = const [],
-    this.photos = const [],
+    this.photos = const <PhotoItem>[],
     this.cameras = const [],
     this.mediaState = MediaPlayerState.idle,
     this.mediaTrack,
@@ -355,7 +372,7 @@ class DisplayState {
     ClimateData? climate,
     List<TimerData>? timers,
     List<AlarmData>? alarms,
-    List<String>? photos,
+    List<PhotoItem>? photos,
     List<CameraData>? cameras,
     MediaPlayerState? mediaState,
     MediaTrack? mediaTrack,
