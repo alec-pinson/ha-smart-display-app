@@ -99,6 +99,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   final _openCameraController = StreamController<CameraData>.broadcast();
   Stream<CameraData> get openCameraStream => _openCameraController.stream;
 
+  final _closeCameraController = StreamController<void>.broadcast();
+  Stream<void> get closeCameraStream => _closeCameraController.stream;
+
   final _browseResultController = StreamController<BrowseResult>.broadcast();
   Stream<BrowseResult> get browseResultStream => _browseResultController.stream;
 
@@ -294,6 +297,10 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         imageBytes: Uint8List(0),
       ));
     }
+    if (payload.containsKey('close_camera')) {
+      setFocusedCamera(null);
+      _closeCameraController.add(null);
+    }
     if (payload.containsKey('focused_camera_data')) {
       final c = payload['focused_camera_data'] as Map<String, dynamic>;
       final bytes = base64Decode(c['data'] as String);
@@ -391,13 +398,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         timerService.stopHaAlarm();
       }
     }
-    if (payload.containsKey('doors')) {
-      final list = (payload['doors'] as List).cast<Map<String, dynamic>>();
-      newState = newState.copyWith(doors: list.map(DoorData.fromJson).toList());
-    }
-    if (payload.containsKey('motions')) {
-      final list = (payload['motions'] as List).cast<Map<String, dynamic>>();
-      newState = newState.copyWith(motions: list.map(MotionData.fromJson).toList());
+    if (payload.containsKey('pills')) {
+      final list = (payload['pills'] as List).cast<Map<String, dynamic>>();
+      newState = newState.copyWith(pills: list.map(PillData.fromJson).toList());
     }
     if (payload.containsKey('photo_command')) {
       _photoCommandController.add(payload['photo_command'] as String);

@@ -584,7 +584,7 @@ class _NormalOverlay extends ConsumerWidget {
           ),
         ),
 
-        // Clock + weather + alarms + door status — only in clock mode
+        // Clock + weather + alarms — only in clock mode
         if (isClockMode)
           Positioned(
             top: 36,
@@ -593,14 +593,13 @@ class _NormalOverlay extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _ClockWeatherPanel(alarms: state.alarms),
-                _DoorStatusPanel(doors: state.doors),
-                _MotionStatusPanel(
-                  motions: state.motions,
-                  onTap: () => ref.read(displayStateProvider.notifier).setAmbientMode('cameras'),
-                ),
+                _UnderClockPills(pills: state.pills.where((p) => p.position == 'under_clock').toList()),
               ],
             ),
           ),
+
+        // Positioned pills (all non-under_clock positions, visible in all modes)
+        ..._buildPositionedPills(state.pills),
 
         // Climate chip — bottom-right in clock mode
         if (isClockMode && state.climate != null)
@@ -674,6 +673,54 @@ class _NormalOverlay extends ConsumerWidget {
       default:
         return const SizedBox.expand(key: ValueKey('clock'));
     }
+  }
+
+  List<Widget> _buildPositionedPills(List<PillData> pills) {
+    final grouped = <String, List<PillData>>{};
+    for (final pill in pills) {
+      if (pill.position == 'under_clock') continue;
+      grouped.putIfAbsent(pill.position, () => []).add(pill);
+    }
+    final positionToAlignment = {
+      'top_left': Alignment.topLeft,
+      'top_center': Alignment.topCenter,
+      'top_right': Alignment.topRight,
+      'center_left': Alignment.centerLeft,
+      'center': Alignment.center,
+      'center_right': Alignment.centerRight,
+      'bottom_left': Alignment.bottomLeft,
+      'bottom_center': Alignment.bottomCenter,
+      'bottom_right': Alignment.bottomRight,
+    };
+    final positionToPadding = {
+      'top_left': const EdgeInsets.only(top: 36, left: 40),
+      'top_center': const EdgeInsets.only(top: 36),
+      'top_right': const EdgeInsets.only(top: 36, right: 40),
+      'center_left': const EdgeInsets.only(left: 40),
+      'center': EdgeInsets.zero,
+      'center_right': const EdgeInsets.only(right: 40),
+      'bottom_left': const EdgeInsets.only(bottom: 32, left: 40),
+      'bottom_center': const EdgeInsets.only(bottom: 32),
+      'bottom_right': const EdgeInsets.only(bottom: 32, right: 40),
+    };
+    return [
+      for (final entry in grouped.entries)
+        Align(
+          alignment: positionToAlignment[entry.key] ?? Alignment.center,
+          child: Padding(
+            padding: positionToPadding[entry.key] ?? EdgeInsets.zero,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (int i = 0; i < entry.value.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  _Pill(pill: entry.value[i]),
+                ],
+              ],
+            ),
+          ),
+        ),
+    ];
   }
 }
 
@@ -2234,6 +2281,7 @@ class _CameraFullScreen extends StatefulWidget {
 class _CameraFullScreenState extends State<_CameraFullScreen> {
   late CameraData _current;
   StreamSubscription<CameraData>? _sub;
+  StreamSubscription<void>? _closeSub;
 
   @override
   void initState() {
@@ -2242,11 +2290,15 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
     _sub = widget.notifier.focusedCameraStream.listen((cam) {
       if (mounted) setState(() => _current = cam);
     });
+    _closeSub = widget.notifier.closeCameraStream.listen((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _closeSub?.cancel();
     super.dispose();
   }
 
@@ -2703,25 +2755,24 @@ class _NotificationDialogState extends State<_NotificationDialog> {
 }
 
 // ---------------------------------------------------------------------------
-// Door status panel (normal clock mode, below clock panel)
+// Pill widgets (generic, driven by add_pill / remove_pill HA actions)
 // ---------------------------------------------------------------------------
 
-class _DoorStatusPanel extends StatelessWidget {
-  final List<DoorData> doors;
-  const _DoorStatusPanel({required this.doors});
+class _UnderClockPills extends StatelessWidget {
+  final List<PillData> pills;
+  const _UnderClockPills({required this.pills});
 
   @override
   Widget build(BuildContext context) {
-    final openDoors = doors.where((d) => d.open).toList();
-    if (openDoors.isEmpty) return const SizedBox.shrink();
+    if (pills.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (int i = 0; i < openDoors.length; i++) ...[
+          for (int i = 0; i < pills.length; i++) ...[
             if (i > 0) const SizedBox(height: 6),
-            _DoorChip(name: openDoors[i].name),
+            _Pill(pill: pills[i]),
           ],
         ],
       ),
@@ -2729,87 +2780,53 @@ class _DoorStatusPanel extends StatelessWidget {
   }
 }
 
-class _DoorChip extends StatelessWidget {
-  final String name;
-  const _DoorChip({required this.name});
+class _Pill extends StatelessWidget {
+  final PillData pill;
+  const _Pill({required this.pill});
+
+  static const _iconMap = <String, IconData>{
+    'door': Icons.door_front_door,
+    'motion': Icons.directions_run,
+    'warning': Icons.warning,
+    'info': Icons.info,
+    'check': Icons.check_circle,
+    'alert': Icons.notifications,
+    'camera': Icons.camera_alt,
+    'lock': Icons.lock_open,
+    'temperature': Icons.thermostat,
+    'person': Icons.person,
+  };
+
+  Color? _parseColor(String? hex) {
+    if (hex == null) return null;
+    final s = hex.startsWith('#') ? hex.substring(1) : hex;
+    if (s.length == 6) return Color(int.parse('FF$s', radix: 16));
+    if (s.length == 8) return Color(int.parse(s, radix: 16));
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final iconData = _iconMap[pill.icon];
+    final bg = _parseColor(pill.color) ?? Colors.white.withOpacity(0.15);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: bg,
         borderRadius: BorderRadius.circular(50),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.door_front_door, color: Colors.white, size: 16),
-          const SizedBox(width: 6),
+          if (iconData != null) ...[
+            Icon(iconData, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+          ],
           Text(
-            '$name open',
+            pill.text,
             style: const TextStyle(color: Colors.white, fontSize: 14),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Motion status panel (normal clock mode, below door status panel)
-// ---------------------------------------------------------------------------
-
-class _MotionStatusPanel extends StatelessWidget {
-  final List<MotionData> motions;
-  final VoidCallback? onTap;
-  const _MotionStatusPanel({required this.motions, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final active = motions.where((m) => m.detected).toList();
-    if (active.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (int i = 0; i < active.length; i++) ...[
-            if (i > 0) const SizedBox(height: 6),
-            _MotionChip(name: active[i].name, onTap: onTap),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _MotionChip extends StatelessWidget {
-  final String name;
-  final VoidCallback? onTap;
-  const _MotionChip({required this.name, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(50),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.directions_run, color: Colors.white, size: 16),
-            const SizedBox(width: 6),
-            Text(
-              '$name motion',
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ],
-        ),
       ),
     );
   }

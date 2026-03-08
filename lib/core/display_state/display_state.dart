@@ -265,22 +265,28 @@ class BrowseItem {
   );
 }
 
-class DoorData {
+class PillData {
   final String id;
-  final String name;
-  final bool open;
-  const DoorData({required this.id, required this.name, required this.open});
-  factory DoorData.fromJson(Map<String, dynamic> j) =>
-      DoorData(id: j['id'] as String, name: j['name'] as String, open: j['open'] as bool);
-}
+  final String text;
+  final String? icon;
+  final String? color;
+  final String position;
 
-class MotionData {
-  final String id;
-  final String name;
-  final bool detected;
-  const MotionData({required this.id, required this.name, required this.detected});
-  factory MotionData.fromJson(Map<String, dynamic> j) =>
-      MotionData(id: j['id'] as String, name: j['name'] as String, detected: j['detected'] as bool);
+  const PillData({
+    required this.id,
+    required this.text,
+    this.icon,
+    this.color,
+    this.position = 'under_clock',
+  });
+
+  factory PillData.fromJson(Map<String, dynamic> j) => PillData(
+    id: j['id'] as String,
+    text: j['text'] as String,
+    icon: j['icon'] as String?,
+    color: j['color'] as String?,
+    position: j['position'] as String? ?? 'under_clock',
+  );
 }
 
 class BrowseResult {
@@ -320,8 +326,7 @@ class DisplayState {
   final MediaPlayerState mediaState;
   final MediaTrack? mediaTrack;
   final bool shuffleEnabled;
-  final List<DoorData> doors;
-  final List<MotionData> motions;
+  final List<PillData> pills;
   final ImmichConfig? immichConfig;
   final int slideshowInterval; // seconds
 
@@ -348,8 +353,7 @@ class DisplayState {
     this.mediaState = MediaPlayerState.idle,
     this.mediaTrack,
     this.shuffleEnabled = false,
-    this.doors = const [],
-    this.motions = const [],
+    this.pills = const [],
     this.immichConfig,
     this.slideshowInterval = 60,
   });
@@ -378,8 +382,7 @@ class DisplayState {
     MediaTrack? mediaTrack,
     bool clearMediaTrack = false,
     bool? shuffleEnabled,
-    List<DoorData>? doors,
-    List<MotionData>? motions,
+    List<PillData>? pills,
     ImmichConfig? immichConfig,
     int? slideshowInterval,
   }) {
@@ -406,8 +409,7 @@ class DisplayState {
       mediaState: mediaState ?? this.mediaState,
       mediaTrack: clearMediaTrack ? null : (mediaTrack ?? this.mediaTrack),
       shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
-      doors: doors ?? this.doors,
-      motions: motions ?? this.motions,
+      pills: pills ?? this.pills,
       immichConfig: immichConfig ?? this.immichConfig,
       slideshowInterval: slideshowInterval ?? this.slideshowInterval,
     );
@@ -429,7 +431,5 @@ class DisplayState {
         if (lux != null) 'lux': double.parse(lux!.toStringAsFixed(1)),
         'media_state': mediaState.name,
         if (mediaTrack != null) 'media_track': mediaTrack!.toJson(),
-        'doors': doors.map((d) => {'id': d.id, 'name': d.name, 'open': d.open}).toList(),
-        'motions': motions.map((m) => {'id': m.id, 'name': m.name, 'detected': m.detected}).toList(),
       };
 }

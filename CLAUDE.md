@@ -48,6 +48,7 @@ User taps camera tile → DisplayStateNotifier.setFocusedCamera(id)
   → on dismiss: setFocusedCamera(null) → HA stops fast loop
 
 HA sends open_camera → openCameraStream fires → _CameraFullScreen dialog shown
+HA sends close_camera → closeCameraStream fires → _CameraFullScreen pops + focused camera cleared
   → same focused camera loop as above
 
 User presses notification button → DisplayStateNotifier.sendNotificationAction()
@@ -100,7 +101,7 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `vadSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled`, `doors`, `motions`, `immichConfig?`, `slideshowInterval` (seconds, default 60) |
+| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `vadSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled`, `pills`, `immichConfig?`, `slideshowInterval` (seconds, default 60) |
 | `PhotoItem`     | `url`, `album?`, `location?` — parsed from `photos` command; `fromJson` handles both string (legacy) and dict format |
 | `ImmichConfig`  | `url`, `apiKey` — stored in DisplayState; used by slideshow to add `x-api-key` header for Immich photo URLs; never sent back to HA in `toJson()` |
 | `MediaPlayerState` | enum: `idle / buffering / playing / paused`                                    |
@@ -113,15 +114,15 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 | `TimerData`     | `id`, `label`, `endsAt` (uses `remaining_seconds` from HA if present)          |
 | `AlarmData`     | `id`, `label`, `time` (HH:MM — seconds stripped from HA time selector output)  |
 | `ClimateData`   | `name`, `currentTemperature`, `humidity`, `targetTemperature`, `hvacMode`, `hvacModes`, `minTemp`, `maxTemp`, `unit` |
-| `DoorData`      | `id`, `name`, `open` — shown as chips below clock when `open == true`; icon: `door_front_door` |
-| `MotionData`    | `id`, `name`, `detected` — shown as chips below door chips when `detected == true`; tapping switches to cameras mode; icon: `directions_run` |
+| `PillData`      | `id`, `text`, `icon?`, `color?`, `position` — generic pill driven by `add_pill` / `remove_pill` HA actions; `under_clock` pills shown below clock panel, other positions rendered via `Align` throughout the screen |
 
 ## Streams exposed by DisplayStateNotifier
 | Stream                | Type              | Purpose                                            |
 | --------------------- | ----------------- | -------------------------------------------------- |
 | `notificationStream`  | `NotificationData`| Transient notification overlays                    |
 | `focusedCameraStream` | `CameraData`      | Live camera frames for full-screen view            |
-| `openCameraStream`    | `CameraData`      | HA-triggered open_camera command (empty imageBytes)|
+| `openCameraStream`    | `CameraData`      | HA-triggered show_camera_stream action (empty imageBytes)      |
+| `closeCameraStream`   | `void`            | HA-triggered close_camera_stream action — pops _CameraFullScreen |
 | `browseResultStream`  | `BrowseResult`    | MA library browse results for Music screen         |
 | `photoCommandStream`  | `String`          | "next"/"previous" from HA button entities; consumed by `_AmbientPhotoSlideshowState` |
 
