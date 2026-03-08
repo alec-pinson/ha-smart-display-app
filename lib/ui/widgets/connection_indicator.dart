@@ -82,21 +82,24 @@ class _ConnectionIndicatorState extends ConsumerState<ConnectionIndicator>
       ConnectionState.disconnected => (const Color(0xFF484F58), 'Home Assistant disconnected'),
     };
 
+    final isConnected = _state == ConnectionState.connected;
+
     return Tooltip(
       message: tooltip,
       child: AnimatedBuilder(
         animation: _pulseAnim,
-        builder: (_, __) => Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: color.withOpacity(
-              _state == ConnectionState.stale ? _pulseAnim.value : 1.0,
+        builder: (_, __) => Opacity(
+          opacity: isConnected ? 0.0 : 1.0,
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: color.withOpacity(
+                _state == ConnectionState.stale ? _pulseAnim.value : 1.0,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: null,
             ),
-            shape: BoxShape.circle,
-            boxShadow: _state == ConnectionState.connected
-                ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 6, spreadRadius: 1)]
-                : null,
           ),
         ),
       ),
