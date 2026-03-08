@@ -80,6 +80,15 @@ User in music display mode: _MusicScreen(isDisplayMode: true) rendered in _build
 HA sends shuffle_enabled → applyCommand() → state.shuffleEnabled updated → shuffle icon highlights
   (also sent after shuffle toggle so icon responds immediately)
 
+HA sends immich_config → applyCommand() → DisplayState.immichConfig set (ImmichConfig{url, apiKey})
+  → _AmbientPhotoSlideshow reads it; adds x-api-key header to CachedNetworkImage for Immich URLs
+
+HA sends slideshow_interval (seconds) → applyCommand() → DisplayState.slideshowInterval updated
+  → _AmbientPhotoSlideshowState.didUpdateWidget() cancels + restarts timer with new duration
+
+HA sends photo_command: next/previous (from button entity press)
+  → photoCommandStream emits → _AmbientPhotoSlideshowState._onPhotoCommand() advances _slideIndex + resets timer
+
 Media pauses or stops → _musicInactiveTimer starts (5 min)
   → on fire: ambientMode reverts to 'clock', mediaTrack cleared → strip hides, music mode exits
   → cancelled on play/play_media/buffering
@@ -91,7 +100,8 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 ## Key data classes (`display_state.dart`)
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `vadSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled`, `doors`, `motions` |
+| `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `vadSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled`, `doors`, `motions`, `immichConfig?`, `slideshowInterval` (seconds, default 60) |
+| `ImmichConfig`  | `url`, `apiKey` — stored in DisplayState; used by slideshow to add `x-api-key` header for Immich photo URLs; never sent back to HA in `toJson()` |
 | `MediaPlayerState` | enum: `idle / buffering / playing / paused`                                    |
 | `MediaTrack`    | `title`, `artist?`, `album?`, `artUrl?`, `durationMs`, `positionMs`; `withPosition(ms)` for updates |
 | `BrowseItem`    | `title`, `subtitle?`, `thumbnail?`, `mediaContentId`, `mediaContentType`, `canPlay`, `canExpand` |
@@ -112,6 +122,7 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 | `focusedCameraStream` | `CameraData`      | Live camera frames for full-screen view            |
 | `openCameraStream`    | `CameraData`      | HA-triggered open_camera command (empty imageBytes)|
 | `browseResultStream`  | `BrowseResult`    | MA library browse results for Music screen         |
+| `photoCommandStream`  | `String`          | "next"/"previous" from HA button entities; consumed by `_AmbientPhotoSlideshowState` |
 
 ## NotificationData fields
 | Field       | Type           | Default    | Notes                                                        |
