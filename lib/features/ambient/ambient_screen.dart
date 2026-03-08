@@ -231,7 +231,7 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
             AnimatedOpacity(
               duration: const Duration(milliseconds: 800),
               opacity: isAmbient ? 0.0 : 1.0,
-              child: _AmbientPhotoSlideshow(photos: displayState.photos),
+              child: _AmbientPhotoSlideshow(photos: displayState.photos, immichConfig: displayState.immichConfig, intervalSeconds: displayState.slideshowInterval, photoCommandStream: ref.read(displayStateProvider.notifier).photoCommandStream),
             ),
             // Dark scrim so clock/text stays readable over photos
             AnimatedOpacity(
@@ -950,7 +950,10 @@ class _ForecastTile extends StatelessWidget {
 
 class _AmbientPhotoSlideshow extends StatefulWidget {
   final List<String> photos;
-  const _AmbientPhotoSlideshow({super.key, required this.photos});
+  final ImmichConfig? immichConfig;
+  final int intervalSeconds;
+  final Stream<String>? photoCommandStream;
+  const _AmbientPhotoSlideshow({super.key, required this.photos, this.immichConfig, this.intervalSeconds = 60, this.photoCommandStream});
 
   @override
   State<_AmbientPhotoSlideshow> createState() => _AmbientPhotoSlideshowState();
@@ -959,11 +962,13 @@ class _AmbientPhotoSlideshow extends StatefulWidget {
 class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
   int _index = 0;
   Timer? _timer;
+  StreamSubscription<String>? _photoCommandSub;
 
   @override
   void initState() {
     super.initState();
     _startTimer();
+    _photoCommandSub = widget.photoCommandStream?.listen(_onPhotoCommand);
   }
 
   @override
@@ -972,10 +977,28 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
     if (old.photos != widget.photos) {
       _index = 0;
     }
+    if (old.intervalSeconds != widget.intervalSeconds) {
+      _timer?.cancel();
+      _startTimer();
+    }
+  }
+
+  void _onPhotoCommand(String cmd) {
+    if (!mounted || widget.photos.isEmpty) return;
+    setState(() {
+      if (cmd == 'next') {
+        _index = (_index + 1) % widget.photos.length;
+      } else if (cmd == 'previous') {
+        _index = (_index - 1 + widget.photos.length) % widget.photos.length;
+      }
+    });
+    // Reset the timer so the photo stays visible for a full interval after manual navigation
+    _timer?.cancel();
+    _startTimer();
   }
 
   void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _timer = Timer.periodic(Duration(seconds: widget.intervalSeconds), (_) {
       if (widget.photos.isNotEmpty && mounted) {
         setState(() => _index = (_index + 1) % widget.photos.length);
       }
@@ -985,6 +1008,7 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
   @override
   void dispose() {
     _timer?.cancel();
+    _photoCommandSub?.cancel();
     super.dispose();
   }
 
@@ -993,15 +1017,18 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
     if (widget.photos.isEmpty) return const SizedBox.shrink();
     final safeIndex = _index.clamp(0, widget.photos.length - 1);
     final url = widget.photos[safeIndex];
+    final cfg = widget.immichConfig;
+    final isImmich = cfg != null && url.startsWith(cfg.url);
     return AnimatedSwitcher(
       duration: const Duration(seconds: 2),
-      child: Image.network(
-        url,
+      child: CachedNetworkImage(
         key: ValueKey(url),
+        imageUrl: url,
+        httpHeaders: isImmich ? {'x-api-key': cfg.apiKey} : const {},
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
-        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        errorWidget: (_, __, ___) => const SizedBox.shrink(),
       ),
     );
   }

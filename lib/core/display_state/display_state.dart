@@ -2,6 +2,12 @@ import 'dart:typed_data';
 
 enum MediaPlayerState { idle, buffering, playing, paused }
 
+class ImmichConfig {
+  final String url;
+  final String apiKey;
+  const ImmichConfig({required this.url, required this.apiKey});
+}
+
 class MediaTrack {
   final String title;
   final String? artist;
@@ -299,6 +305,8 @@ class DisplayState {
   final bool shuffleEnabled;
   final List<DoorData> doors;
   final List<MotionData> motions;
+  final ImmichConfig? immichConfig;
+  final int slideshowInterval; // seconds
 
   const DisplayState({
     required this.wakeWord,
@@ -325,6 +333,8 @@ class DisplayState {
     this.shuffleEnabled = false,
     this.doors = const [],
     this.motions = const [],
+    this.immichConfig,
+    this.slideshowInterval = 60,
   });
 
   DisplayState copyWith({
@@ -353,6 +363,8 @@ class DisplayState {
     bool? shuffleEnabled,
     List<DoorData>? doors,
     List<MotionData>? motions,
+    ImmichConfig? immichConfig,
+    int? slideshowInterval,
   }) {
     return DisplayState(
       wakeWord: wakeWord ?? this.wakeWord,
@@ -379,6 +391,8 @@ class DisplayState {
       shuffleEnabled: shuffleEnabled ?? this.shuffleEnabled,
       doors: doors ?? this.doors,
       motions: motions ?? this.motions,
+      immichConfig: immichConfig ?? this.immichConfig,
+      slideshowInterval: slideshowInterval ?? this.slideshowInterval,
     );
   }
 

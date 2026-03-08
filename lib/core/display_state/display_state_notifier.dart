@@ -102,6 +102,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   final _browseResultController = StreamController<BrowseResult>.broadcast();
   Stream<BrowseResult> get browseResultStream => _browseResultController.stream;
 
+  final _photoCommandController = StreamController<String>.broadcast();
+  Stream<String> get photoCommandStream => _photoCommandController.stream;
+
   void setFocusedCamera(String? id) {
     _focusedCamera = id;
     _pushState();
@@ -396,6 +399,21 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       final list = (payload['motions'] as List).cast<Map<String, dynamic>>();
       newState = newState.copyWith(motions: list.map(MotionData.fromJson).toList());
     }
+    if (payload.containsKey('photo_command')) {
+      _photoCommandController.add(payload['photo_command'] as String);
+    }
+    if (payload.containsKey('slideshow_interval')) {
+      newState = newState.copyWith(slideshowInterval: (payload['slideshow_interval'] as num).toInt());
+    }
+    if (payload.containsKey('immich_config')) {
+      final cfg = payload['immich_config'] as Map<String, dynamic>;
+      newState = newState.copyWith(
+        immichConfig: ImmichConfig(
+          url: cfg['url'] as String,
+          apiKey: cfg['api_key'] as String,
+        ),
+      );
+    }
     if (payload.containsKey('browse_result')) {
       final br = payload['browse_result'] as Map<String, dynamic>;
       _browseResultController.add(BrowseResult.fromJson(br));
@@ -547,6 +565,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _focusedCameraController.close();
     _openCameraController.close();
     _browseResultController.close();
+    _photoCommandController.close();
     super.dispose();
   }
 }
