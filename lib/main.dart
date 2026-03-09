@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -10,6 +11,9 @@ import 'core/display_state/display_state_notifier.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Cap image cache to 50MB — device only has 1GB RAM and runs 24/7
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024;
 
   // Landscape kiosk
   await SystemChrome.setPreferredOrientations([
