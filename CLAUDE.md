@@ -183,8 +183,9 @@ crossfades over 800ms. `AnimatedSwitcher` was dropped (unreliable with full-scre
 - `responding`: spinner hidden immediately on response received, TTS playing, wake word still paused
 - `idle`: TTS complete, wake word detection resumes
 
-## Memory
-- `memory_mb` (ProcessInfo.currentRss ÷ 1MB, rounded) included in every state broadcast → HA Memory Usage diagnostic sensor
+## Memory / diagnostics
+- `memory_mb` (ProcessInfo.currentRss ÷ 1MB, rounded) included in every state broadcast → HA Memory Usage diagnostic sensor (disabled by default)
+- `thread_count` (parsed from `/proc/self/status` `Threads:` line) included in every state broadcast → HA Thread Count diagnostic sensor (disabled by default)
 - Flutter image cache capped at 30MB in `main()` (`PaintingBinding.instance.imageCache.maximumSizeBytes`)
 - All `CachedNetworkImage` calls use `memCacheWidth` (and `memCacheHeight` for fixed-size widgets) to decode at display resolution rather than full source resolution — prevents large source images from consuming hundreds of MB
 

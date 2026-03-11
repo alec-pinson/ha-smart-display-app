@@ -433,5 +433,18 @@ class DisplayState {
         'media_state': mediaState.name,
         if (mediaTrack != null) 'media_track': mediaTrack!.toJson(),
         'memory_mb': (ProcessInfo.currentRss / (1024 * 1024)).round(),
+        'thread_count': _readThreadCount(),
       };
+}
+
+int _readThreadCount() {
+  try {
+    final status = File('/proc/self/status').readAsStringSync();
+    for (final line in status.split('\n')) {
+      if (line.startsWith('Threads:')) {
+        return int.tryParse(line.split(':').last.trim()) ?? 0;
+      }
+    }
+  } catch (_) {}
+  return 0;
 }

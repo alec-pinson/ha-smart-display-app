@@ -593,6 +593,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _notificationController.close();
     _focusedCameraController.close();
     _openCameraController.close();
+    _closeCameraController.close();
     _browseResultController.close();
     _photoCommandController.close();
     super.dispose();

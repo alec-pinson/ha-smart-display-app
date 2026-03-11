@@ -57,6 +57,8 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private var echoCanceller: AcousticEchoCanceler? = null
     private var audioThread: HandlerThread? = null
     private var audioHandler: Handler? = null
+    private var resumeThread: HandlerThread? = null
+    private var resumeHandler: Handler? = null
     private var microFrontend: MicroFrontend? = null
     private var interpreter: Interpreter? = null
 
@@ -118,19 +120,23 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                 // Poll AudioManager.isMusicActive() until speaker output stops before
                 // unpausing detection. This prevents TTS audio still draining through
                 // the AudioTrack buffer from re-triggering the wake word.
-                // Runs on a new thread so it doesn't block the MethodChannel handler
-                // or the audio loop thread.
-                Thread {
+                // Runs on a dedicated HandlerThread so it doesn't block the MethodChannel
+                // handler or the audio loop thread. removeCallbacksAndMessages cancels any
+                // pending resume before posting the new one — only the latest resume runs,
+                // preventing thread accumulation over hours of use.
+                val handler = resumeHandler ?: run { paused = false; return }
+                handler.removeCallbacksAndMessages(null)
+                handler.post {
                     val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     val deadline = System.currentTimeMillis() + 8000L
                     while (System.currentTimeMillis() < deadline && running) {
                         if (!am.isMusicActive) break
-                        Thread.sleep(100)
+                        try { Thread.sleep(100) } catch (_: InterruptedException) { return@post }
                     }
-                    if (!running) return@Thread
+                    if (!running) return@post
                     // Extra 500ms for room echo decay after speaker goes quiet.
-                    Thread.sleep(500)
-                    if (!running) return@Thread
+                    try { Thread.sleep(500) } catch (_: InterruptedException) { return@post }
+                    if (!running) return@post
                     // All writes before the volatile paused=false are visible to the
                     // audio thread when it next reads paused (JMM happens-before).
                     probabilityWindow.clear()
@@ -140,7 +146,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                     microFrontend?.reset()
                     paused = false
                     Log.d(TAG, "resume: unpaused after audio went quiet")
-                }.start()
+                }
             }
             else -> result.notImplemented()
         }
@@ -227,6 +233,9 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         val thread = HandlerThread("WakeWordAudio").also { it.start() }
         audioThread = thread
         audioHandler = Handler(thread.looper)
+        val resumeHt = HandlerThread("WakeWordResume").also { it.start() }
+        resumeThread = resumeHt
+        resumeHandler = Handler(resumeHt.looper)
         record.startRecording()
         Log.d(TAG, "startAll: recording started")
         audioHandler!!.post { audioLoop(record, samplesPerStep) }
@@ -238,6 +247,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         audioRecord?.let { try { it.stop() } catch (_: Exception) {}; it.release() }
         audioRecord = null
         audioThread?.quitSafely(); audioThread = null; audioHandler = null
+        resumeThread?.quitSafely(); resumeThread = null; resumeHandler = null
         microFrontend?.close(); microFrontend = null
         interpreter?.close(); interpreter = null
         frameBuffer.clear(); probabilityWindow.clear()

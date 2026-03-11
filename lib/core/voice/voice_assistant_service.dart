@@ -30,6 +30,7 @@ class VoiceAssistantService {
   final _ttsPlayer = AudioPlayer();
   bool _isRecordingCommand = false;
   Timer? _processingTimeout;
+  Timer? _musicResumeTimer;
   bool _musicWasPlaying = false;
 
   // VAD config
@@ -133,7 +134,9 @@ class VoiceAssistantService {
     // MediaPlayerService.resume() is a no-op if state is idle (e.g. "stop music" command).
     if (_musicWasPlaying) {
       _musicWasPlaying = false;
-      Future.delayed(const Duration(milliseconds: 1500), () {
+      _musicResumeTimer?.cancel();
+      _musicResumeTimer = Timer(const Duration(milliseconds: 1500), () {
+        _musicResumeTimer = null;
         _ref.read(mediaPlayerServiceProvider).resume();
       });
     }
@@ -295,6 +298,7 @@ class VoiceAssistantService {
 
   void dispose() {
     _processingTimeout?.cancel();
+    _musicResumeTimer?.cancel();
     _recorder.dispose();
     _ttsPlayer.dispose();
     _stateController.close();
