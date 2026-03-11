@@ -15,7 +15,7 @@ import '../server/display_server.dart';
 
 final _log = Logger();
 
-enum VoiceAssistantState { idle, detected, listening, processing }
+enum VoiceAssistantState { idle, detected, listening, processing, responding }
 
 class VoiceAssistantService {
   final Ref _ref;
@@ -92,11 +92,16 @@ class VoiceAssistantService {
   Future<void> onResponseReceived({String? ttsUrl}) async {
     _processingTimeout?.cancel();
     _processingTimeout = null;
+    // Transition to responding immediately — hides the processing spinner in the UI
+    // while still keeping wake word detection paused until TTS finishes.
+    if (_state == VoiceAssistantState.processing) {
+      _setState(VoiceAssistantState.responding);
+    }
     // Play TTS before resuming wake word — avoids the TTS audio re-triggering detection
     if (ttsUrl != null && ttsUrl.isNotEmpty) {
       await _playTts(ttsUrl);
     }
-    if (_state == VoiceAssistantState.processing) _resetToIdle();
+    if (_state == VoiceAssistantState.responding) _resetToIdle();
   }
 
   Future<void> _playTts(String url) async {

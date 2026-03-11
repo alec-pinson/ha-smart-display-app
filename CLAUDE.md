@@ -59,8 +59,10 @@ User adjusts thermostat → DisplayStateNotifier.setClimateTemperature(temp) / s
 
 HA sends play_media → applyCommand() → MediaPlayerService.play(url); if title non-empty also sets mediaTrack
   → if title empty (MA flow), keep current track displayed until media_track arrives
-  → MediaPlayerService emits MediaStatus every 5s while playing → _onMediaStatus() → broadcastState() → HA entity updates
+  → _positionTimer (1s) advances positionMs in state locally — no HA broadcast, UI only
+  → MediaPlayerService emits MediaStatus on playback state changes only (play/pause/stop) → _onMediaStatus() → broadcastState() → HA entity updates
   → idle state debounced 1.5s (_mediaIdleTimer) to avoid strip flickering during track changes
+  → _positionTimer starts on playing, stops on pause/stop/idle, resets on play_media
 
 HA sends media_track → applyCommand() → updates mediaTrack display without affecting playback
   → used by MA integration to push real track title/artist/art when ma_media_player is configured
@@ -174,6 +176,17 @@ port, device ID (from `deviceIdProvider`), uptime, wake word count.
 ## Ambient ↔ normal crossfade
 Two `AnimatedOpacity` + `IgnorePointer` pairs — both overlays always in tree, opacity
 crossfades over 800ms. `AnimatedSwitcher` was dropped (unreliable with full-screen children).
+
+## Voice assistant states
+`VoiceAssistantState` enum: `idle → detected → listening → processing → responding → idle`
+- `processing`: spinner shown, wake word paused, waiting for HA response
+- `responding`: spinner hidden immediately on response received, TTS playing, wake word still paused
+- `idle`: TTS complete, wake word detection resumes
+
+## Memory
+- `memory_mb` (ProcessInfo.currentRss ÷ 1MB, rounded) included in every state broadcast → HA Memory Usage diagnostic sensor
+- Flutter image cache capped at 30MB in `main()` (`PaintingBinding.instance.imageCache.maximumSizeBytes`)
+- All `CachedNetworkImage` calls use `memCacheWidth` (and `memCacheHeight` for fixed-size widgets) to decode at display resolution rather than full source resolution — prevents large source images from consuming hundreds of MB
 
 ## Adding a new command key
 1. Add field to `DisplayState` + `copyWith()` + `toJson()`

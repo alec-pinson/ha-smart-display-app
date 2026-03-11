@@ -96,6 +96,10 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           _glowController.repeat(reverse: true);
         } else if (s == VoiceAssistantState.processing) {
           _glowController.repeat();
+        } else if (s == VoiceAssistantState.responding) {
+          // Response received — hide overlay immediately but keep wake word paused until TTS finishes
+          _glowController.stop();
+          _glowController.reset();
         } else {
           _glowController.stop();
           _glowController.reset();
@@ -297,7 +301,8 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           ),
 
           // Voice assistant overlay — glow border + listening animation
-          if (_voiceState != VoiceAssistantState.idle)
+          if (_voiceState != VoiceAssistantState.idle &&
+              _voiceState != VoiceAssistantState.responding)
             IgnorePointer(
               child: _VoiceOverlay(
                 state: _voiceState,
@@ -1078,6 +1083,7 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
+            memCacheWidth: 1280,
             errorWidget: (_, __, ___) => const SizedBox.shrink(),
           ),
         ),
@@ -1351,6 +1357,8 @@ class _NowPlayingStrip extends StatelessWidget {
                           imageUrl: track.artUrl!,
                           width: 48,
                           height: 48,
+                          memCacheWidth: 48,
+                          memCacheHeight: 48,
                           fit: BoxFit.cover,
                           errorWidget: (_, __, ___) => _artPlaceholder(),
                         )
@@ -1619,6 +1627,8 @@ class _MusicScreenState extends ConsumerState<_MusicScreen>
                     imageUrl: track!.artUrl!,
                     width: 280,
                     height: 280,
+                    memCacheWidth: 280,
+                    memCacheHeight: 280,
                     fit: BoxFit.cover,
                     errorWidget: (_, __, ___) => _artPlaceholder(280),
                   )
@@ -1898,6 +1908,8 @@ class _BrowsePanelItem extends StatelessWidget {
                       imageUrl: item.thumbnail!,
                       width: 56,
                       height: 56,
+                      memCacheWidth: 56,
+                      memCacheHeight: 56,
                       fit: BoxFit.cover,
                       errorWidget: (_, __, ___) => _placeholder(),
                     )

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 enum MediaPlayerState { idle, buffering, playing, paused }
@@ -431,5 +432,6 @@ class DisplayState {
         if (lux != null) 'lux': double.parse(lux!.toStringAsFixed(1)),
         'media_state': mediaState.name,
         if (mediaTrack != null) 'media_track': mediaTrack!.toJson(),
+        'memory_mb': (ProcessInfo.currentRss / (1024 * 1024)).round(),
       };
 }

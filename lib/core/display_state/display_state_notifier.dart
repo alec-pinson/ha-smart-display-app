@@ -88,6 +88,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   StreamSubscription? _mediaStatusSub;
   Timer? _mediaIdleTimer;
   Timer? _musicInactiveTimer;
+  Timer? _positionTimer;
   static const _musicInactiveTimeout = Duration(minutes: 5);
 
   final _notificationController = StreamController<NotificationData>.broadcast();
@@ -144,6 +145,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       // before the next play_media arrives. Only commit idle after 1.5s.
       _mediaIdleTimer ??= Timer(const Duration(milliseconds: 1500), () {
         _mediaIdleTimer = null;
+        _stopPositionTimer();
         state = state.copyWith(mediaState: MediaPlayerState.idle);
         _pushState();
         _startMusicInactiveTimer();
@@ -156,12 +158,34 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         mediaTrack: state.mediaTrack?.withPosition(status.positionMs),
       );
       _pushState();
-      if (status.state == MediaPlayerState.playing || status.state == MediaPlayerState.buffering) {
+      if (status.state == MediaPlayerState.playing) {
+        _startPositionTimer();
         _cancelMusicInactiveTimer();
-      } else if (status.state == MediaPlayerState.paused) {
-        _startMusicInactiveTimer();
+      } else {
+        _stopPositionTimer();
+        if (status.state == MediaPlayerState.paused) {
+          _startMusicInactiveTimer();
+        }
       }
     }
+  }
+
+  void _startPositionTimer() {
+    if (_positionTimer != null) return; // already running
+    _positionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final track = state.mediaTrack;
+      if (track == null || state.mediaState != MediaPlayerState.playing) return;
+      final newPos = track.durationMs > 0
+          ? (track.positionMs + 1000).clamp(0, track.durationMs)
+          : track.positionMs + 1000;
+      // Update state locally — no _pushState(), avoids HA churn
+      state = state.copyWith(mediaTrack: track.withPosition(newPos));
+    });
+  }
+
+  void _stopPositionTimer() {
+    _positionTimer?.cancel();
+    _positionTimer = null;
   }
 
   void _startMusicInactiveTimer() {
@@ -347,6 +371,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       _mediaIdleTimer?.cancel();
       _mediaIdleTimer = null;
       _cancelMusicInactiveTimer();
+      _stopPositionTimer(); // reset; will restart when just_audio reports playing
       final pm = payload['play_media'] as Map<String, dynamic>;
       final url = pm['url'] as String;
       final title = pm['title'] as String? ?? '';
@@ -564,6 +589,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _mediaStatusSub?.cancel();
     _mediaIdleTimer?.cancel();
     _musicInactiveTimer?.cancel();
+    _positionTimer?.cancel();
     _notificationController.close();
     _focusedCameraController.close();
     _openCameraController.close();
