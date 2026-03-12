@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -1035,25 +1037,23 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
     }
   }
 
+  void _advance(int delta) {
+    if (widget.photos.isEmpty || !mounted) return;
+    setState(() {
+      _index = (_index + delta + widget.photos.length) % widget.photos.length;
+    });
+  }
+
   void _onPhotoCommand(String cmd) {
     if (!mounted || widget.photos.isEmpty) return;
-    setState(() {
-      if (cmd == 'next') {
-        _index = (_index + 1) % widget.photos.length;
-      } else if (cmd == 'previous') {
-        _index = (_index - 1 + widget.photos.length) % widget.photos.length;
-      }
-    });
-    // Reset the timer so the photo stays visible for a full interval after manual navigation
     _timer?.cancel();
+    _advance(cmd == 'next' ? 1 : -1);
     _startTimer();
   }
 
   void _startTimer() {
     _timer = Timer.periodic(Duration(seconds: widget.intervalSeconds), (_) {
-      if (widget.photos.isNotEmpty && mounted) {
-        setState(() => _index = (_index + 1) % widget.photos.length);
-      }
+      _advance(1);
     });
   }
 
@@ -1069,22 +1069,15 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
     if (widget.photos.isEmpty) return const SizedBox.shrink();
     final safeIndex = _index.clamp(0, widget.photos.length - 1);
     final photo = widget.photos[safeIndex];
-    final cfg = widget.immichConfig;
-    final isImmich = cfg != null && photo.url.startsWith(cfg.url);
     return Stack(
       fit: StackFit.expand,
       children: [
         AnimatedSwitcher(
           duration: const Duration(seconds: 2),
-          child: CachedNetworkImage(
+          child: _PhotoImageLoader(
             key: ValueKey(photo.url),
-            imageUrl: photo.url,
-            httpHeaders: isImmich ? {'x-api-key': cfg.apiKey} : const {},
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            memCacheWidth: 1280,
-            errorWidget: (_, __, ___) => const SizedBox.shrink(),
+            photo: photo,
+            immichConfig: widget.immichConfig,
           ),
         ),
         if (photo.album != null || photo.location != null)
@@ -1132,6 +1125,86 @@ class _PhotoMetadataLabel extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Photo image loader with explicit GPU texture disposal
+// ---------------------------------------------------------------------------
+
+/// Loads a photo via [DefaultCacheManager] (disk-cached) and decodes it to a
+/// [ui.Image] via [ui.instantiateImageCodec]. Displays via [RawImage].
+///
+/// Calls [ui.Image.dispose] in [dispose] so the GPU texture is released
+/// immediately when [AnimatedSwitcher] removes this widget after the crossfade
+/// — no waiting for Dart GC or Skia's internal LRU eviction.
+class _PhotoImageLoader extends StatefulWidget {
+  final PhotoItem photo;
+  final ImmichConfig? immichConfig;
+  const _PhotoImageLoader({super.key, required this.photo, this.immichConfig});
+
+  @override
+  State<_PhotoImageLoader> createState() => _PhotoImageLoaderState();
+}
+
+class _PhotoImageLoaderState extends State<_PhotoImageLoader> {
+  ui.Image? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(_PhotoImageLoader old) {
+    super.didUpdateWidget(old);
+    if (old.photo.url != widget.photo.url) {
+      _image?.dispose();
+      _image = null;
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    final headers = <String, String>{};
+    final cfg = widget.immichConfig;
+    if (cfg != null && widget.photo.url.startsWith(cfg.url)) {
+      headers['x-api-key'] = cfg.apiKey;
+    }
+    try {
+      final file = await DefaultCacheManager().getSingleFile(
+        widget.photo.url,
+        headers: headers,
+      );
+      if (!mounted) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      final codec = await ui.instantiateImageCodec(bytes, targetWidth: 1280);
+      final frame = await codec.getNextFrame();
+      if (!mounted) {
+        frame.image.dispose();
+        return;
+      }
+      setState(() => _image = frame.image);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _image?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_image == null) return const SizedBox.shrink();
+    return RawImage(
+      image: _image,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
     );
   }
 }
@@ -2689,12 +2762,14 @@ class _NotificationDialogState extends State<_NotificationDialog> {
               if (n.imageUrl != null) ...[
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                  child: Image.network(
-                    n.imageUrl!,
+                  child: CachedNetworkImage(
+                    imageUrl: n.imageUrl!,
                     height: 300,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    memCacheWidth: 1280,
+                    memCacheHeight: 300,
+                    errorWidget: (_, __, ___) => const SizedBox.shrink(),
                   ),
                 ),
                 const SizedBox(height: 24),

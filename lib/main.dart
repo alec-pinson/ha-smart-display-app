@@ -12,7 +12,11 @@ import 'core/display_state/display_state_notifier.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Cap image cache to 30MB — device only has 1GB RAM and runs 24/7
+  // Cap image cache — device only has 1GB RAM and runs 24/7.
+  // Photos bypass imageCache entirely (loaded via _PhotoImageLoader + RawImage,
+  // disposed explicitly on widget disposal). maximumSize = 10 covers album art,
+  // weather icons, notification thumbnails, and browse items with comfortable margin.
+  PaintingBinding.instance.imageCache.maximumSize = 10;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 30 * 1024 * 1024;
 
   // Landscape kiosk

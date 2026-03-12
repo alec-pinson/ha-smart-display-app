@@ -84,7 +84,7 @@ HA sends shuffle_enabled → applyCommand() → state.shuffleEnabled updated →
   (also sent after shuffle toggle so icon responds immediately)
 
 HA sends immich_config → applyCommand() → DisplayState.immichConfig set (ImmichConfig{url, apiKey})
-  → _AmbientPhotoSlideshow reads it; adds x-api-key header to CachedNetworkImage for Immich URLs
+  → _AmbientPhotoSlideshow passes it to _PhotoImageLoader; adds x-api-key header when fetching from Immich URL
 
 HA sends slideshow_interval (seconds) → applyCommand() → DisplayState.slideshowInterval updated
   → _AmbientPhotoSlideshowState.didUpdateWidget() cancels + restarts timer with new duration
@@ -186,7 +186,8 @@ crossfades over 800ms. `AnimatedSwitcher` was dropped (unreliable with full-scre
 ## Memory / diagnostics
 - `memory_mb` (ProcessInfo.currentRss ÷ 1MB, rounded) included in every state broadcast → HA Memory Usage diagnostic sensor (disabled by default)
 - `thread_count` (parsed from `/proc/self/status` `Threads:` line) included in every state broadcast → HA Thread Count diagnostic sensor (disabled by default)
-- Flutter image cache capped at 30MB in `main()` (`PaintingBinding.instance.imageCache.maximumSizeBytes`)
+- Flutter image cache capped at 30MB + `maximumSize=10` in `main()` — photos bypass `imageCache` entirely via `_PhotoImageLoader`, so this budget covers album art/icons/thumbnails only
+- `_PhotoImageLoader` loads photos via `DefaultCacheManager` + `ui.instantiateImageCodec(targetWidth: 1280)` → `RawImage`; calls `ui.Image.dispose()` in `dispose()` so GPU textures are freed immediately after crossfade (no waiting for Dart GC or Skia LRU)
 - All `CachedNetworkImage` calls use `memCacheWidth` (and `memCacheHeight` for fixed-size widgets) to decode at display resolution rather than full source resolution — prevents large source images from consuming hundreds of MB
 
 ## Adding a new command key
