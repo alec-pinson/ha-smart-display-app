@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -1210,6 +1211,65 @@ class _PhotoImageLoaderState extends State<_PhotoImageLoader> {
 }
 
 // ---------------------------------------------------------------------------
+// Camera image widget — explicit ui.Image.dispose() to free GPU textures promptly.
+// Image.memory() relies on Dart GC finalizers which are not prompt; this widget
+// mirrors _PhotoImageLoader to ensure Skia GrResourceCache entries are released
+// as soon as the widget is replaced or removed.
+// ---------------------------------------------------------------------------
+
+class _CameraImageWidget extends StatefulWidget {
+  final Uint8List imageBytes;
+  final BoxFit fit;
+  const _CameraImageWidget({required this.imageBytes, this.fit = BoxFit.cover});
+
+  @override
+  State<_CameraImageWidget> createState() => _CameraImageWidgetState();
+}
+
+class _CameraImageWidgetState extends State<_CameraImageWidget> {
+  ui.Image? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    _load(widget.imageBytes);
+  }
+
+  @override
+  void didUpdateWidget(_CameraImageWidget old) {
+    super.didUpdateWidget(old);
+    if (!identical(widget.imageBytes, old.imageBytes)) {
+      _load(widget.imageBytes);
+    }
+  }
+
+  Future<void> _load(Uint8List bytes) async {
+    if (bytes.isEmpty) return;
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    if (!mounted) {
+      frame.image.dispose();
+      return;
+    }
+    final old = _image;
+    setState(() => _image = frame.image);
+    old?.dispose();
+  }
+
+  @override
+  void dispose() {
+    _image?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_image == null) return const SizedBox.expand();
+    return RawImage(image: _image, fit: widget.fit);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Ambient mode: camera grid
 // ---------------------------------------------------------------------------
 
@@ -1265,7 +1325,7 @@ class _CameraTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.memory(camera.imageBytes, fit: BoxFit.cover),
+            _CameraImageWidget(imageBytes: camera.imageBytes),
             Positioned(
               left: 0,
               right: 0,
@@ -2397,11 +2457,7 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
           fit: StackFit.expand,
           children: [
             if (_current.imageBytes.isNotEmpty)
-              Image.memory(
-                _current.imageBytes,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-              )
+              _CameraImageWidget(imageBytes: _current.imageBytes, fit: BoxFit.cover)
             else
               const Center(
                 child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 1.5),
