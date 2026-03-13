@@ -17,7 +17,7 @@ void main() async {
   // disposed explicitly on widget disposal). maximumSize = 10 covers album art,
   // weather icons, notification thumbnails, and browse items with comfortable margin.
   PaintingBinding.instance.imageCache.maximumSize = 10;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 30 * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 10 * 1024 * 1024;
 
   // Landscape kiosk
   await SystemChrome.setPreferredOrientations([

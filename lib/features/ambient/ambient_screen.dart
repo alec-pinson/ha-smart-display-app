@@ -1184,11 +1184,14 @@ class _PhotoImageLoaderState extends State<_PhotoImageLoader> {
       if (!mounted) return;
       final codec = await ui.instantiateImageCodec(bytes, targetWidth: 1280);
       final frame = await codec.getNextFrame();
+      codec.dispose();
       if (!mounted) {
         frame.image.dispose();
         return;
       }
+      final old = _image;
       setState(() => _image = frame.image);
+      old?.dispose();
     } catch (_) {}
   }
 
@@ -1247,6 +1250,7 @@ class _CameraImageWidgetState extends State<_CameraImageWidget> {
     if (bytes.isEmpty) return;
     final codec = await ui.instantiateImageCodec(bytes);
     final frame = await codec.getNextFrame();
+    codec.dispose();
     if (!mounted) {
       frame.image.dispose();
       return;

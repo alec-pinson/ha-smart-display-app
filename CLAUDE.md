@@ -186,9 +186,9 @@ crossfades over 800ms. `AnimatedSwitcher` was dropped (unreliable with full-scre
 ## Memory / diagnostics
 - `memory_mb` (ProcessInfo.currentRss ÷ 1MB, rounded) included in every state broadcast → HA Memory Usage diagnostic sensor (disabled by default)
 - `thread_count` (parsed from `/proc/self/status` `Threads:` line) included in every state broadcast → HA Thread Count diagnostic sensor (disabled by default)
-- Flutter image cache capped at 30MB + `maximumSize=10` in `main()` — photos bypass `imageCache` entirely via `_PhotoImageLoader`, so this budget covers album art/icons/thumbnails only
-- `_PhotoImageLoader` loads photos via `DefaultCacheManager` + `ui.instantiateImageCodec(targetWidth: 1280)` → `RawImage`; calls `ui.Image.dispose()` in `dispose()` so GPU textures are freed immediately after crossfade (no waiting for Dart GC or Skia LRU)
-- `_CameraImageWidget` mirrors `_PhotoImageLoader` for camera frames — `Image.memory` was replaced with this widget in both `_CameraTile` and `_CameraFullScreen`; same explicit `ui.Image.dispose()` pattern; old frame disposed as soon as new frame is decoded
+- Flutter image cache capped at 10MB + `maximumSize=10` in `main()` — photos bypass `imageCache` entirely via `_PhotoImageLoader`, so this budget covers album art/icons/thumbnails only
+- `_PhotoImageLoader` loads photos via `DefaultCacheManager` + `ui.instantiateImageCodec(targetWidth: 1280)` → `RawImage`; calls `codec.dispose()` immediately after `getNextFrame()` (frees native decode buffers); saves old `_image` before `setState`, disposes it after (prevents GPU texture leak on concurrent loads); calls `ui.Image.dispose()` in `dispose()` so GPU textures are freed immediately after crossfade
+- `_CameraImageWidget` mirrors `_PhotoImageLoader` for camera frames — `Image.memory` was replaced with this widget in both `_CameraTile` and `_CameraFullScreen`; same `codec.dispose()` + old-frame-dispose pattern; GPU texture released as soon as new frame is decoded
 - Skia GPU resource cache budget is already ~47 MB by default (`FlutterLoader` computes `screenWidth × screenHeight × 12 × 4`); no override needed. The historical OOM crash was caused by pinned textures (Dart GC holding references to `Image.memory` images), which sit outside the LRU budget — fix is prompt `dispose()`, not a larger/smaller budget
 - All `CachedNetworkImage` calls use `memCacheWidth` (and `memCacheHeight` for fixed-size widgets) to decode at display resolution rather than full source resolution — prevents large source images from consuming hundreds of MB
 
