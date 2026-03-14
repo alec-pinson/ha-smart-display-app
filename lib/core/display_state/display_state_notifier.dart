@@ -89,6 +89,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   Timer? _mediaIdleTimer;
   Timer? _musicInactiveTimer;
   Timer? _positionTimer;
+  Timer? _cameraAutoCloseTimer;
   static const _musicInactiveTimeout = Duration(minutes: 5);
 
   final _notificationController = StreamController<NotificationData>.broadcast();
@@ -320,8 +321,17 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         name: name,
         imageBytes: Uint8List(0),
       ));
+      _cameraAutoCloseTimer?.cancel();
+      if (c.containsKey('duration')) {
+        final seconds = (c['duration'] as num).toInt();
+        _cameraAutoCloseTimer = Timer(Duration(seconds: seconds), () {
+          setFocusedCamera(null);
+          _closeCameraController.add(null);
+        });
+      }
     }
     if (payload.containsKey('close_camera')) {
+      _cameraAutoCloseTimer?.cancel();
       setFocusedCamera(null);
       _closeCameraController.add(null);
     }
@@ -590,6 +600,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _mediaIdleTimer?.cancel();
     _musicInactiveTimer?.cancel();
     _positionTimer?.cancel();
+    _cameraAutoCloseTimer?.cancel();
     _notificationController.close();
     _focusedCameraController.close();
     _openCameraController.close();
