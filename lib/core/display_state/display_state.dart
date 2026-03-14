@@ -311,6 +311,7 @@ class DisplayState {
   final String wakeWordSensitivity; // 'low' | 'medium' | 'high'
   final String vadSensitivity; // 'default' | 'relaxed' | 'aggressive'
   final bool wakeWordSound; // play audio on wake word detection
+  final bool microphoneMuted; // disables wake word detection entirely
   final String ambientMode;
   final bool ambientActive;
   final int brightness;
@@ -339,6 +340,7 @@ class DisplayState {
     this.wakeWordSensitivity = 'medium',
     this.vadSensitivity = 'default',
     this.wakeWordSound = true,
+    this.microphoneMuted = false,
     required this.ambientMode,
     required this.ambientActive,
     required this.brightness,
@@ -368,6 +370,7 @@ class DisplayState {
     String? wakeWordSensitivity,
     String? vadSensitivity,
     bool? wakeWordSound,
+    bool? microphoneMuted,
     String? ambientMode,
     bool? ambientActive,
     int? brightness,
@@ -397,6 +400,7 @@ class DisplayState {
       wakeWordSensitivity: wakeWordSensitivity ?? this.wakeWordSensitivity,
       vadSensitivity: vadSensitivity ?? this.vadSensitivity,
       wakeWordSound: wakeWordSound ?? this.wakeWordSound,
+      microphoneMuted: microphoneMuted ?? this.microphoneMuted,
       ambientMode: ambientMode ?? this.ambientMode,
       ambientActive: ambientActive ?? this.ambientActive,
       brightness: brightness ?? this.brightness,
@@ -427,6 +431,7 @@ class DisplayState {
         'wake_word_sensitivity': wakeWordSensitivity,
         'vad_sensitivity': vadSensitivity,
         'wake_word_sound': wakeWordSound,
+        'microphone_muted': microphoneMuted,
         'ambient_mode': ambientMode,
         'ambient_active': ambientActive,
         'brightness': brightness,

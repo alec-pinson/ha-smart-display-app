@@ -20,6 +20,7 @@ const _wakeWordKey = 'wake_word';
 const _wakeWordSensitivityKey = 'wake_word_sensitivity';
 const _vadSensitivityKey = 'vad_sensitivity';
 const _wakeWordSoundKey = 'wake_word_sound';
+const _microphoneMutedKey = 'microphone_muted';
 const _brightnessKey = 'brightness';
 const _autoBrightnessKey = 'auto_brightness';
 
@@ -38,6 +39,11 @@ Future<String> loadPersistedVadSensitivity() async {
 Future<bool> loadPersistedWakeWordSound() async {
   final val = await _storage.read(key: _wakeWordSoundKey);
   return val != 'false'; // default true
+}
+
+Future<bool> loadPersistedMicrophoneMuted() async {
+  final val = await _storage.read(key: _microphoneMutedKey);
+  return val == 'true'; // default false
 }
 
 Future<int> loadPersistedBrightness() async {
@@ -121,12 +127,13 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _pushState();
   }
 
-  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', String initialVadSensitivity = 'default', bool initialWakeWordSound = true, int initialVolume = 50, int initialBrightness = 128, bool initialAutoBrightness = false})
+  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', String initialVadSensitivity = 'default', bool initialWakeWordSound = true, bool initialMicrophoneMuted = false, int initialVolume = 50, int initialBrightness = 128, bool initialAutoBrightness = false})
       : super(DisplayState(
           wakeWord: initialWakeWord,
           wakeWordSensitivity: initialWakeWordSensitivity,
           vadSensitivity: initialVadSensitivity,
           wakeWordSound: initialWakeWordSound,
+          microphoneMuted: initialMicrophoneMuted,
           ambientMode: 'clock',
           ambientActive: false,
           brightness: initialBrightness,
@@ -264,6 +271,11 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       final enabled = payload['wake_word_sound'] as bool;
       newState = newState.copyWith(wakeWordSound: enabled);
       _storage.write(key: _wakeWordSoundKey, value: enabled.toString());
+    }
+    if (payload.containsKey('microphone_muted')) {
+      final muted = payload['microphone_muted'] as bool;
+      newState = newState.copyWith(microphoneMuted: muted);
+      _storage.write(key: _microphoneMutedKey, value: muted.toString());
     }
     if (payload.containsKey('ambient_mode')) {
       newState = newState.copyWith(ambientMode: payload['ambient_mode'] as String);

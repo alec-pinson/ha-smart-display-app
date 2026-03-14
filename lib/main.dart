@@ -38,6 +38,7 @@ void main() async {
   final initialWakeWordSensitivity = await loadPersistedWakeWordSensitivity();
   final initialVadSensitivity = await loadPersistedVadSensitivity();
   final initialWakeWordSound = await loadPersistedWakeWordSound();
+  final initialMicrophoneMuted = await loadPersistedMicrophoneMuted();
   final initialVolume = await loadInitialVolume();
   final initialBrightness = await loadPersistedBrightness();
   final initialAutoBrightness = await loadPersistedAutoBrightness();
@@ -48,7 +49,7 @@ void main() async {
         (ref) => PairingNotifier(alreadyPaired),
       ),
       displayStateProvider.overrideWith(
-        (ref) => DisplayStateNotifier(ref, initialWakeWord: initialWakeWord, initialWakeWordSensitivity: initialWakeWordSensitivity, initialVadSensitivity: initialVadSensitivity, initialWakeWordSound: initialWakeWordSound, initialVolume: initialVolume, initialBrightness: initialBrightness, initialAutoBrightness: initialAutoBrightness),
+        (ref) => DisplayStateNotifier(ref, initialWakeWord: initialWakeWord, initialWakeWordSensitivity: initialWakeWordSensitivity, initialVadSensitivity: initialVadSensitivity, initialWakeWordSound: initialWakeWordSound, initialMicrophoneMuted: initialMicrophoneMuted, initialVolume: initialVolume, initialBrightness: initialBrightness, initialAutoBrightness: initialAutoBrightness),
       ),
     ],
   );

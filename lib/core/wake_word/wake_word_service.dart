@@ -113,12 +113,16 @@ class WakeWordService {
 
 final wakeWordServiceProvider = Provider<WakeWordService>((ref) {
   final svc = WakeWordService(ref);
-  // Watch wake word + sensitivity; restart when either changes
+  // Watch wake word, sensitivity, and mute state; stop or restart when any changes
   ref.listen(
-    displayStateProvider.select((s) => (s.wakeWord, s.wakeWordSensitivity)),
+    displayStateProvider.select((s) => (s.wakeWord, s.wakeWordSensitivity, s.microphoneMuted)),
     (prev, next) {
-      final (word, sensitivity) = next;
-      svc.start(word, sensitivity);
+      final (word, sensitivity, muted) = next;
+      if (muted) {
+        svc.stop();
+      } else {
+        svc.start(word, sensitivity);
+      }
     },
     fireImmediately: true,
   );
