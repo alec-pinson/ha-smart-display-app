@@ -249,6 +249,10 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       Future.delayed(const Duration(milliseconds: 500), () => SystemNavigator.pop());
       return;
     }
+    if (payload['action'] == 'wake_for_voice') {
+      unawaited(_ref.read(voiceAssistantServiceProvider).onWakeWordDetected());
+      return;
+    }
 
     var newState = state;
 
