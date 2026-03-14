@@ -238,7 +238,7 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
             AnimatedOpacity(
               duration: const Duration(milliseconds: 800),
               opacity: isAmbient ? 0.0 : 1.0,
-              child: _AmbientPhotoSlideshow(photos: displayState.photos, immichConfig: displayState.immichConfig, intervalSeconds: displayState.slideshowInterval, photoCommandStream: ref.read(displayStateProvider.notifier).photoCommandStream),
+              child: _AmbientPhotoSlideshow(photos: displayState.photos, immichConfig: displayState.immichConfig, intervalSeconds: displayState.slideshowInterval, photoCommandStream: ref.read(displayStateProvider.notifier).photoCommandStream, isAmbient: isAmbient),
             ),
             // Dark scrim so clock/text stays readable over photos
             AnimatedOpacity(
@@ -644,6 +644,7 @@ class _NormalOverlay extends ConsumerWidget {
                 track: state.mediaTrack!,
                 notifier: ref.read(displayStateProvider.notifier),
                 onTapInfo: () => ref.read(displayStateProvider.notifier).setAmbientMode('music'),
+                isAmbient: state.ambientActive,
               ),
             ),
           ),
@@ -1012,7 +1013,8 @@ class _AmbientPhotoSlideshow extends StatefulWidget {
   final ImmichConfig? immichConfig;
   final int intervalSeconds;
   final Stream<String>? photoCommandStream;
-  const _AmbientPhotoSlideshow({super.key, required this.photos, this.immichConfig, this.intervalSeconds = 60, this.photoCommandStream});
+  final bool isAmbient;
+  const _AmbientPhotoSlideshow({super.key, required this.photos, this.immichConfig, this.intervalSeconds = 60, this.photoCommandStream, this.isAmbient = false});
 
   @override
   State<_AmbientPhotoSlideshow> createState() => _AmbientPhotoSlideshowState();
@@ -1026,7 +1028,7 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
   @override
   void initState() {
     super.initState();
-    _startTimer();
+    if (!widget.isAmbient) _startTimer();
     _photoCommandSub = widget.photoCommandStream?.listen(_onPhotoCommand);
   }
 
@@ -1039,6 +1041,14 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
     if (old.intervalSeconds != widget.intervalSeconds) {
       _timer?.cancel();
       _startTimer();
+    }
+    if (old.isAmbient != widget.isAmbient) {
+      if (widget.isAmbient) {
+        _timer?.cancel();
+        _timer = null;
+      } else {
+        _startTimer();
+      }
     }
   }
 
@@ -1373,7 +1383,8 @@ class _CameraTile extends StatelessWidget {
 class _MarqueeText extends StatefulWidget {
   final String text;
   final TextStyle style;
-  const _MarqueeText({required this.text, required this.style});
+  final bool isActive;
+  const _MarqueeText({required this.text, required this.style, this.isActive = true});
 
   @override
   State<_MarqueeText> createState() => _MarqueeTextState();
@@ -1389,7 +1400,9 @@ class _MarqueeTextState extends State<_MarqueeText> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleStart(2000));
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleStart(2000));
+    }
   }
 
   @override
@@ -1404,6 +1417,19 @@ class _MarqueeTextState extends State<_MarqueeText> {
       _forward = true;
       if (_scrollController.hasClients) _scrollController.jumpTo(0);
       _scheduleStart(2000);
+    }
+    if (oldWidget.isActive != widget.isActive) {
+      if (!widget.isActive) {
+        _timer?.cancel();
+        _timer = null;
+        _delayTimer?.cancel();
+        _delayTimer = null;
+      } else {
+        _offset = 0;
+        _forward = true;
+        if (_scrollController.hasClients) _scrollController.jumpTo(0);
+        _scheduleStart(2000);
+      }
     }
   }
 
@@ -1468,11 +1494,13 @@ class _NowPlayingStrip extends StatelessWidget {
   final MediaTrack track;
   final DisplayStateNotifier notifier;
   final VoidCallback? onTapInfo;
+  final bool isAmbient;
   const _NowPlayingStrip({
     required this.mediaState,
     required this.track,
     required this.notifier,
     this.onTapInfo,
+    this.isAmbient = false,
   });
 
   @override
@@ -1518,6 +1546,7 @@ class _NowPlayingStrip extends StatelessWidget {
                       _MarqueeText(
                         text: track.title.isNotEmpty ? track.title : 'Now Playing',
                         style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        isActive: !isAmbient,
                       ),
                       if (track.artist != null && track.artist!.isNotEmpty) ...[
                         const SizedBox(height: 2),
