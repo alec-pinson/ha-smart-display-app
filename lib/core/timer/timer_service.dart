@@ -23,8 +23,8 @@ class TimerService {
   // Player for HA-triggered alarm — independent loop
   final _haAlarmPlayer = AudioPlayer();
 
-  // Player for HA-triggered siren — independent loop
-  final _sirenPlayer = AudioPlayer();
+  // Player for HA-triggered siren — recreated on each start to bypass just_audio asset cache
+  AudioPlayer? _sirenPlayer;
   int? _preSirenVolume; // saved before siren starts, restored on stop
 
   // Player for notification sound — plays once on each notification
@@ -110,11 +110,14 @@ class TimerService {
   /// Called by HA siren_sounding switch turning ON
   Future<void> startHaSiren() async {
     try {
+      // Dispose any previous instance — recreating bypasses just_audio's asset cache
+      await _sirenPlayer?.dispose();
+      _sirenPlayer = AudioPlayer();
       _preSirenVolume = _ref.read(displayStateProvider).volume;
       await _systemChannel.invokeMethod('setVolume', {'volume': 100});
-      await _sirenPlayer.setLoopMode(LoopMode.one);
-      await _sirenPlayer.setAsset('assets/audio/siren.mp3');
-      await _sirenPlayer.play();
+      await _sirenPlayer!.setLoopMode(LoopMode.one);
+      await _sirenPlayer!.setAsset('assets/audio/siren.mp3');
+      await _sirenPlayer!.play();
       _log.i('TimerService: HA siren started (saved volume: $_preSirenVolume)');
     } catch (e) {
       _log.w('TimerService: could not start HA siren: $e');
@@ -123,7 +126,7 @@ class TimerService {
 
   /// Called by HA siren_sounding switch turning OFF
   Future<void> stopHaSiren() async {
-    _sirenPlayer.stop();
+    await _sirenPlayer?.stop();
     if (_preSirenVolume != null) {
       try {
         await _systemChannel.invokeMethod('setVolume', {'volume': _preSirenVolume});
@@ -153,7 +156,7 @@ class TimerService {
     _firingController.close();
     _chimePlayer.dispose();
     _haAlarmPlayer.dispose();
-    _sirenPlayer.dispose();
+    _sirenPlayer?.dispose();
     _notificationPlayer.dispose();
   }
 }
