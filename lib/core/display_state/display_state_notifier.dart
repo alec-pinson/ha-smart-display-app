@@ -19,6 +19,7 @@ const _storage = FlutterSecureStorage(aOptions: _androidOptions);
 const _wakeWordKey = 'wake_word';
 const _wakeWordSensitivityKey = 'wake_word_sensitivity';
 const _vadSensitivityKey = 'vad_sensitivity';
+const _wakeWordSoundKey = 'wake_word_sound';
 const _brightnessKey = 'brightness';
 const _autoBrightnessKey = 'auto_brightness';
 
@@ -32,6 +33,11 @@ Future<String> loadPersistedWakeWordSensitivity() async {
 
 Future<String> loadPersistedVadSensitivity() async {
   return await _storage.read(key: _vadSensitivityKey) ?? 'default';
+}
+
+Future<bool> loadPersistedWakeWordSound() async {
+  final val = await _storage.read(key: _wakeWordSoundKey);
+  return val != 'false'; // default true
 }
 
 Future<int> loadPersistedBrightness() async {
@@ -115,11 +121,12 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _pushState();
   }
 
-  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', String initialVadSensitivity = 'default', int initialVolume = 50, int initialBrightness = 128, bool initialAutoBrightness = false})
+  DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', String initialVadSensitivity = 'default', bool initialWakeWordSound = true, int initialVolume = 50, int initialBrightness = 128, bool initialAutoBrightness = false})
       : super(DisplayState(
           wakeWord: initialWakeWord,
           wakeWordSensitivity: initialWakeWordSensitivity,
           vadSensitivity: initialVadSensitivity,
+          wakeWordSound: initialWakeWordSound,
           ambientMode: 'clock',
           ambientActive: false,
           brightness: initialBrightness,
@@ -253,6 +260,11 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       newState = newState.copyWith(vadSensitivity: vadSensitivity);
       _storage.write(key: _vadSensitivityKey, value: vadSensitivity);
     }
+    if (payload.containsKey('wake_word_sound')) {
+      final enabled = payload['wake_word_sound'] as bool;
+      newState = newState.copyWith(wakeWordSound: enabled);
+      _storage.write(key: _wakeWordSoundKey, value: enabled.toString());
+    }
     if (payload.containsKey('ambient_mode')) {
       newState = newState.copyWith(ambientMode: payload['ambient_mode'] as String);
     }
@@ -356,6 +368,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         tapAction: n['tap_action'] as String?,
         position: n['position'] as String? ?? 'center',
       ));
+      if (n['sound'] as bool? ?? true) {
+        unawaited(_ref.read(timerServiceProvider).playNotificationSound());
+      }
     }
     if (payload.containsKey('timers')) {
       final timers = (payload['timers'] as List)
@@ -431,6 +446,15 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         timerService.startHaAlarm();
       } else {
         timerService.stopHaAlarm();
+      }
+    }
+    if (payload.containsKey('siren_sounding')) {
+      final sounding = payload['siren_sounding'] as bool;
+      final timerService = _ref.read(timerServiceProvider);
+      if (sounding) {
+        unawaited(timerService.startHaSiren());
+      } else {
+        timerService.stopHaSiren();
       }
     }
     if (payload.containsKey('pills')) {

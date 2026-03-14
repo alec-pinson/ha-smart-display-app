@@ -28,6 +28,7 @@ class VoiceAssistantService {
 
   final _recorder = AudioRecorder();
   final _ttsPlayer = AudioPlayer();
+  final _triggerPlayer = AudioPlayer();
   bool _isRecordingCommand = false;
   Timer? _processingTimeout;
   Timer? _musicResumeTimer;
@@ -62,10 +63,27 @@ class VoiceAssistantService {
 
     // Pause music if playing — will resume after voice response unless a stop command came through
     final mediaSvc = _ref.read(mediaPlayerServiceProvider);
-    final mediaState = _ref.read(displayStateProvider).mediaState;
+    final displayState = _ref.read(displayStateProvider);
+    final mediaState = displayState.mediaState;
     _musicWasPlaying = mediaState == MediaPlayerState.playing || mediaState == MediaPlayerState.buffering;
     if (_musicWasPlaying) {
       await mediaSvc.pause();
+    }
+
+    // Play trigger sound if enabled — awaited to completion so the recorder
+    // doesn't grab audio focus mid-playback and cut the sound off
+    if (displayState.wakeWordSound) {
+      try {
+        await _triggerPlayer.setLoopMode(LoopMode.off);
+        await _triggerPlayer.setAsset('assets/audio/wake_word_triggered.mp3');
+        final completedFuture = _triggerPlayer.processingStateStream
+            .firstWhere((s) => s == ProcessingState.completed)
+            .timeout(const Duration(seconds: 3), onTimeout: () => ProcessingState.idle);
+        await _triggerPlayer.play();
+        await completedFuture;
+      } catch (e) {
+        _log.w('VoiceAssistant: could not play trigger sound: $e');
+      }
     }
 
     // Brief pause so the wake-word utterance finishes before we start recording
@@ -301,6 +319,7 @@ class VoiceAssistantService {
     _musicResumeTimer?.cancel();
     _recorder.dispose();
     _ttsPlayer.dispose();
+    _triggerPlayer.dispose();
     _stateController.close();
   }
 }

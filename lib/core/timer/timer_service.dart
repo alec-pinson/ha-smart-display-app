@@ -20,6 +20,12 @@ class TimerService {
   // Player for HA-triggered alarm — independent loop
   final _haAlarmPlayer = AudioPlayer();
 
+  // Player for HA-triggered siren — independent loop
+  final _sirenPlayer = AudioPlayer();
+
+  // Player for notification sound — plays once on each notification
+  final _notificationPlayer = AudioPlayer();
+
   Timer? _checkTimer;
 
   final _firingController = StreamController<FiringAlert?>.broadcast();
@@ -97,11 +103,42 @@ class TimerService {
     _log.i('TimerService: HA alarm stopped');
   }
 
+  /// Called by HA siren_sounding switch turning ON
+  Future<void> startHaSiren() async {
+    try {
+      await _sirenPlayer.setLoopMode(LoopMode.one);
+      await _sirenPlayer.setAsset('assets/audio/siren.mp3');
+      await _sirenPlayer.play();
+      _log.i('TimerService: HA siren started');
+    } catch (e) {
+      _log.w('TimerService: could not start HA siren: $e');
+    }
+  }
+
+  /// Called by HA siren_sounding switch turning OFF
+  void stopHaSiren() {
+    _sirenPlayer.stop();
+    _log.i('TimerService: HA siren stopped');
+  }
+
+  /// Called when a notification arrives from HA
+  Future<void> playNotificationSound() async {
+    try {
+      await _notificationPlayer.setLoopMode(LoopMode.off);
+      await _notificationPlayer.setAsset('assets/audio/notification.mp3');
+      await _notificationPlayer.play();
+    } catch (e) {
+      _log.w('TimerService: could not play notification sound: $e');
+    }
+  }
+
   void dispose() {
     _checkTimer?.cancel();
     _firingController.close();
     _chimePlayer.dispose();
     _haAlarmPlayer.dispose();
+    _sirenPlayer.dispose();
+    _notificationPlayer.dispose();
   }
 }
 
