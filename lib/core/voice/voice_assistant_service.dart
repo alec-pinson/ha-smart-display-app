@@ -120,6 +120,12 @@ class VoiceAssistantService {
     if (ttsUrl != null && ttsUrl.isNotEmpty) {
       await _playTts(ttsUrl);
     }
+    // Signal HA satellite entity that TTS playback is done → RESPONDING → IDLE
+    try {
+      _ref.read(displayServerProvider).sendEvent({'event': 'tts_finished'});
+    } catch (e) {
+      _log.w('VoiceAssistant: failed to send tts_finished: $e');
+    }
     if (_state == VoiceAssistantState.responding) _resetToIdle();
   }
 
