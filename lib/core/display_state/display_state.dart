@@ -13,7 +13,8 @@ class PhotoItem {
   final String url;
   final String? album;
   final String? location;
-  const PhotoItem({required this.url, this.album, this.location});
+  final String? date;
+  const PhotoItem({required this.url, this.album, this.location, this.date});
 
   factory PhotoItem.fromJson(dynamic json) {
     if (json is String) return PhotoItem(url: json);
@@ -22,6 +23,7 @@ class PhotoItem {
       url: map['url'] as String,
       album: map['album'] as String?,
       location: map['location'] as String?,
+      date: map['date'] as String?,
     );
   }
 }

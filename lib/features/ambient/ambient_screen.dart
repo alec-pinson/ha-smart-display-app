@@ -748,7 +748,7 @@ class _AmbientOverlay extends StatelessWidget {
         children: [
           _AmbientClock(),
           if (state.weather != null) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 32),
             _AmbientWeather(weather: state.weather!),
           ],
         ],
@@ -790,18 +790,18 @@ class _AmbientClockState extends State<_AmbientClock> {
           DateFormat('HH:mm').format(_now),
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 140,
+            fontSize: 200,
             fontWeight: FontWeight.w200,
-            letterSpacing: -2,
+            letterSpacing: -4,
             height: 1,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         Text(
           DateFormat('EEEE, d MMMM').format(_now),
           style: TextStyle(
             color: Colors.white.withOpacity(0.4),
-            fontSize: 34,
+            fontSize: 52,
             fontWeight: FontWeight.w300,
             letterSpacing: 0.5,
           ),
@@ -820,13 +820,13 @@ class _AmbientWeather extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        WeatherIcon(condition: weather.condition, size: 34, color: Colors.white38),
-        const SizedBox(width: 10),
+        WeatherIcon(condition: weather.condition, size: 52, color: Colors.white38),
+        const SizedBox(width: 16),
         Text(
           weather.temperature != null
               ? '${weather.temperature!.round()}${weather.temperatureUnit}'
               : weather.condition,
-          style: const TextStyle(color: Colors.white38, fontSize: 34),
+          style: const TextStyle(color: Colors.white38, fontSize: 52),
         ),
       ],
     );
@@ -1081,16 +1081,17 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
             immichConfig: widget.immichConfig,
           ),
         ),
-        if (photo.album != null || photo.location != null)
+        if (photo.album != null || photo.location != null || photo.date != null)
           Positioned(
             top: 8,
             right: 52,
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 600),
               child: _PhotoMetadataLabel(
-                key: ValueKey('${photo.album}|${photo.location}'),
+                key: ValueKey('${photo.album}|${photo.location}|${photo.date}'),
                 album: photo.album,
                 location: photo.location,
+                date: photo.date,
               ),
             ),
           ),
@@ -1102,13 +1103,15 @@ class _AmbientPhotoSlideshowState extends State<_AmbientPhotoSlideshow> {
 class _PhotoMetadataLabel extends StatelessWidget {
   final String? album;
   final String? location;
-  const _PhotoMetadataLabel({super.key, this.album, this.location});
+  final String? date;
+  const _PhotoMetadataLabel({super.key, this.album, this.location, this.date});
 
   @override
   Widget build(BuildContext context) {
     final lines = <String>[
       if (album != null) album!,
       if (location != null) location!,
+      if (date != null) date!,
     ];
     if (lines.isEmpty) return const SizedBox.shrink();
     return Column(

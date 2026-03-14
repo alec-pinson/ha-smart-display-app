@@ -104,7 +104,7 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 | Class           | Fields                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
 | `DisplayState`  | all state fields incl. `wakeWordSensitivity`, `vadSensitivity`, `lux`, `photos`, `cameras`, `timers`, `alarms`, `climate`, `mediaState`, `mediaTrack?`, `shuffleEnabled`, `pills`, `immichConfig?`, `slideshowInterval` (seconds, default 60) |
-| `PhotoItem`     | `url`, `album?`, `location?` — parsed from `photos` command; `fromJson` handles both string (legacy) and dict format |
+| `PhotoItem`     | `url`, `album?`, `location?`, `date?` — parsed from `photos` command; `fromJson` handles both string (legacy) and dict format; `date` is pre-formatted "Month Year" string from HA (omitted when year already in album name) |
 | `ImmichConfig`  | `url`, `apiKey` — stored in DisplayState; used by slideshow to add `x-api-key` header for Immich photo URLs; never sent back to HA in `toJson()` |
 | `MediaPlayerState` | enum: `idle / buffering / playing / paused`                                    |
 | `MediaTrack`    | `title`, `artist?`, `album?`, `artUrl?`, `durationMs`, `positionMs`; `withPosition(ms)` for updates |
