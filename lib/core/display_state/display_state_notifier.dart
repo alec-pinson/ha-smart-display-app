@@ -454,7 +454,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       if (sounding) {
         unawaited(timerService.startHaSiren());
       } else {
-        timerService.stopHaSiren();
+        unawaited(timerService.stopHaSiren());
       }
     }
     if (payload.containsKey('pills')) {

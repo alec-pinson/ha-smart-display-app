@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
 
 import '../display_state/display_state.dart';
 import '../display_state/display_state_notifier.dart';
+
+const _systemChannel = MethodChannel('ha_smart_display/system');
 
 final _log = Logger();
 
@@ -22,6 +25,7 @@ class TimerService {
 
   // Player for HA-triggered siren — independent loop
   final _sirenPlayer = AudioPlayer();
+  int? _preSirenVolume; // saved before siren starts, restored on stop
 
   // Player for notification sound — plays once on each notification
   final _notificationPlayer = AudioPlayer();
@@ -106,19 +110,31 @@ class TimerService {
   /// Called by HA siren_sounding switch turning ON
   Future<void> startHaSiren() async {
     try {
+      _preSirenVolume = _ref.read(displayStateProvider).volume;
+      await _systemChannel.invokeMethod('setVolume', {'volume': 100});
       await _sirenPlayer.setLoopMode(LoopMode.one);
       await _sirenPlayer.setAsset('assets/audio/siren.mp3');
       await _sirenPlayer.play();
-      _log.i('TimerService: HA siren started');
+      _log.i('TimerService: HA siren started (saved volume: $_preSirenVolume)');
     } catch (e) {
       _log.w('TimerService: could not start HA siren: $e');
     }
   }
 
   /// Called by HA siren_sounding switch turning OFF
-  void stopHaSiren() {
+  Future<void> stopHaSiren() async {
     _sirenPlayer.stop();
-    _log.i('TimerService: HA siren stopped');
+    if (_preSirenVolume != null) {
+      try {
+        await _systemChannel.invokeMethod('setVolume', {'volume': _preSirenVolume});
+        _log.i('TimerService: HA siren stopped, volume restored to $_preSirenVolume');
+      } catch (e) {
+        _log.w('TimerService: could not restore volume: $e');
+      }
+      _preSirenVolume = null;
+    } else {
+      _log.i('TimerService: HA siren stopped');
+    }
   }
 
   /// Called when a notification arrives from HA
