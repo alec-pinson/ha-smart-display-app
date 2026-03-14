@@ -736,22 +736,26 @@ class _NormalOverlay extends ConsumerWidget {
 // Ambient mode overlay — minimal, centred
 // ---------------------------------------------------------------------------
 
-class _AmbientOverlay extends StatelessWidget {
+class _AmbientOverlay extends ConsumerWidget {
   final DisplayState state;
   const _AmbientOverlay({super.key, required this.state});
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _AmbientClock(),
-          if (state.weather != null) ...[
-            const SizedBox(height: 32),
-            _AmbientWeather(weather: state.weather!),
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => ref.read(displayStateProvider.notifier).suppressAmbient(),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _AmbientClock(),
+            if (state.weather != null) ...[
+              const SizedBox(height: 32),
+              _AmbientWeather(weather: state.weather!),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

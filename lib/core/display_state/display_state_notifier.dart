@@ -102,7 +102,9 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   Timer? _musicInactiveTimer;
   Timer? _positionTimer;
   Timer? _cameraAutoCloseTimer;
+  Timer? _ambientSuppressTimer;
   static const _musicInactiveTimeout = Duration(minutes: 5);
+  static const _ambientSuppressDuration = Duration(minutes: 10);
 
   final _notificationController = StreamController<NotificationData>.broadcast();
   Stream<NotificationData> get notificationStream => _notificationController.stream;
@@ -125,6 +127,19 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   void setFocusedCamera(String? id) {
     _focusedCamera = id;
     _pushState();
+  }
+
+  /// Called when the user taps in ambient mode — exits ambient for 10 minutes,
+  /// ignoring any HA commands that would re-enable it during that window.
+  void suppressAmbient() {
+    _ambientSuppressTimer?.cancel();
+    _ambientSuppressTimer = Timer(_ambientSuppressDuration, () {
+      _ambientSuppressTimer = null;
+    });
+    if (state.ambientActive) {
+      state = state.copyWith(ambientActive: false);
+      _pushState();
+    }
   }
 
   DisplayStateNotifier(this._ref, {String initialWakeWord = 'alexa', String initialWakeWordSensitivity = 'medium', String initialVadSensitivity = 'default', bool initialWakeWordSound = true, bool initialMicrophoneMuted = false, int initialVolume = 50, int initialBrightness = 128, bool initialAutoBrightness = false})
@@ -285,7 +300,11 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       newState = newState.copyWith(ambientMode: payload['ambient_mode'] as String);
     }
     if (payload.containsKey('ambient_active')) {
-      newState = newState.copyWith(ambientActive: payload['ambient_active'] as bool);
+      final wantActive = payload['ambient_active'] as bool;
+      // Ignore re-activation while suppressed (user tapped to dismiss ambient)
+      if (!wantActive || _ambientSuppressTimer == null) {
+        newState = newState.copyWith(ambientActive: wantActive);
+      }
     }
     if (payload.containsKey('auto_brightness')) {
       final auto = payload['auto_brightness'] as bool;
@@ -641,6 +660,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _musicInactiveTimer?.cancel();
     _positionTimer?.cancel();
     _cameraAutoCloseTimer?.cancel();
+    _ambientSuppressTimer?.cancel();
     _notificationController.close();
     _focusedCameraController.close();
     _openCameraController.close();
