@@ -148,6 +148,7 @@ class DisplayServer {
         client.sink.add(msg);
       } catch (e) {
         _log.w('DisplayServer: broadcast failed: $e');
+        _removeClient(client);
       }
     }
   }
@@ -160,6 +161,7 @@ class DisplayServer {
         client.sink.add(msg);
       } catch (e) {
         _log.d('DisplayServer: ping send failed: $e');
+        _removeClient(client);
       }
     }
   }
@@ -172,7 +174,16 @@ class DisplayServer {
         client.sink.add(msg);
       } catch (e) {
         _log.d('DisplayServer: event send failed: $e');
+        _removeClient(client);
       }
+    }
+  }
+
+  void _removeClient(WebSocketChannel client) {
+    if (_clients.remove(client)) {
+      if (!_clientCountController.isClosed) _clientCountController.add(_clients.length);
+      try { client.sink.close(); } catch (_) {}
+      _log.d('DisplayServer: removed dead client');
     }
   }
 
