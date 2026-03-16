@@ -90,7 +90,7 @@ class ForecastPeriod {
         datetime: json['datetime'] as String? ?? '',
         temperature: (json['temperature'] as num?)?.toDouble(),
         condition: json['condition'] as String? ?? 'unknown',
-        precipitationProbability: json['precipitation_probability'] as int?,
+        precipitationProbability: (json['precipitation_probability'] as num?)?.toInt(),
       );
 }
 
@@ -163,7 +163,7 @@ class WeatherData {
         condition: json['condition'] as String? ?? 'unknown',
         temperature: (json['temperature'] as num?)?.toDouble(),
         temperatureUnit: json['temperature_unit'] as String? ?? '°C',
-        humidity: json['humidity'] as int?,
+        humidity: (json['humidity'] as num?)?.toInt(),
         windSpeed: (json['wind_speed'] as num?)?.toDouble(),
         forecast: (json['forecast'] as List? ?? [])
             .map((f) => ForecastPeriod.fromJson(f as Map<String, dynamic>))
