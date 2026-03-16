@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/device/device_id_service.dart';
 import '../../core/pairing/pairing_service.dart';
 
 class PairingScreen extends ConsumerStatefulWidget {
@@ -47,6 +48,7 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   @override
   Widget build(BuildContext context) {
     final pairing = ref.watch(pairingProvider);
+    final deviceIdAsync = ref.watch(deviceIdProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
@@ -117,16 +119,30 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
               ],
             ),
           ),
-          if (_ipAddress != null)
+          if (deviceIdAsync.valueOrNull != null || _ipAddress != null)
             Positioned(
               right: 20,
               bottom: 20,
-              child: Text(
-                _ipAddress!,
-                style: const TextStyle(
-                  color: Color(0xFF8B949E),
-                  fontSize: 13,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (deviceIdAsync.valueOrNull != null)
+                    Text(
+                      deviceIdAsync.valueOrNull!,
+                      style: const TextStyle(
+                        color: Color(0xFF8B949E),
+                        fontSize: 13,
+                      ),
+                    ),
+                  if (_ipAddress != null)
+                    Text(
+                      _ipAddress!,
+                      style: const TextStyle(
+                        color: Color(0xFF8B949E),
+                        fontSize: 13,
+                      ),
+                    ),
+                ],
               ),
             ),
         ],
