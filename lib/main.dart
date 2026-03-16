@@ -15,7 +15,10 @@ void main() async {
 
   // Clear just_audio's on-disk asset cache so updated audio files in a
   // reinstalled APK are always picked up (cache persists across adb install -r).
-  await AudioPlayer.clearAssetCache();
+  // Ignore errors on fresh install where the cache directory doesn't exist yet.
+  try {
+    await AudioPlayer.clearAssetCache();
+  } catch (_) {}
 
   // Cap image cache — device only has 1GB RAM and runs 24/7.
   // Photos bypass imageCache entirely (loaded via _PhotoImageLoader + RawImage,

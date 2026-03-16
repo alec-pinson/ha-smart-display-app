@@ -796,7 +796,7 @@ class _AmbientClockState extends State<_AmbientClock> {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 200,
-            fontWeight: FontWeight.w200,
+            fontWeight: FontWeight.w400,
             letterSpacing: -4,
             height: 1,
           ),
@@ -807,7 +807,7 @@ class _AmbientClockState extends State<_AmbientClock> {
           style: TextStyle(
             color: Colors.white.withOpacity(0.4),
             fontSize: 52,
-            fontWeight: FontWeight.w300,
+            fontWeight: FontWeight.w400,
             letterSpacing: 0.5,
           ),
         ),
@@ -3061,7 +3061,7 @@ class _ClockWeatherPanelState extends State<_ClockWeatherPanel> {
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 96,
-                fontWeight: FontWeight.w200,
+                fontWeight: FontWeight.w400,
                 letterSpacing: -2,
                 height: 1,
               ),
@@ -3077,7 +3077,7 @@ class _ClockWeatherPanelState extends State<_ClockWeatherPanel> {
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.55),
                     fontSize: 20,
-                    fontWeight: FontWeight.w300,
+                    fontWeight: FontWeight.w400,
                     letterSpacing: 0.5,
                   ),
                 ),
