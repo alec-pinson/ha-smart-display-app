@@ -261,7 +261,10 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
 
   void _applyCommandInner(Map<String, dynamic> payload) {
     if (payload['action'] == 'restart') {
-      Future.delayed(const Duration(milliseconds: 500), () => SystemNavigator.pop());
+      Future.delayed(
+        const Duration(milliseconds: 500),
+        () => _platform.invokeMethod('restart'),
+      );
       return;
     }
     if (payload['action'] == 'wake_for_voice') {
