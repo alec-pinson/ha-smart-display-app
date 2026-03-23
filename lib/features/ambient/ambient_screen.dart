@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2468,22 +2469,118 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
   StreamSubscription<CameraData>? _sub;
   StreamSubscription<void>? _closeSub;
 
+  // MJPEG stream
+  HttpClient? _httpClient;
+  Uint8List? _mjpegFrame;
+
+  // Audio
+  AudioPlayer? _audioPlayer;
+  bool _muted = false;
+
+  bool get _isVideoMode => widget.initialCamera.streamType != CameraStreamType.snapshot;
+
   @override
   void initState() {
     super.initState();
     _current = widget.initialCamera;
-    _sub = widget.notifier.focusedCameraStream.listen((cam) {
-      if (mounted) setState(() => _current = cam);
-    });
+
+    if (_isVideoMode) {
+      _startMjpegStream();
+      _startAudio();
+    } else {
+      // Snapshot mode — listen for JPEG frames from HA
+      _sub = widget.notifier.focusedCameraStream.listen((cam) {
+        if (mounted) setState(() => _current = cam);
+      });
+    }
+
     _closeSub = widget.notifier.closeCameraStream.listen((_) {
       if (mounted) Navigator.of(context).pop();
     });
+  }
+
+  void _startAudio() {
+    final url = widget.initialCamera.audioUrl;
+    if (url == null) return;
+    _audioPlayer = AudioPlayer();
+    _audioPlayer!.setUrl(url).then((_) {
+      if (mounted) _audioPlayer?.play();
+    }).catchError((e) {
+      debugPrint('Camera audio error: $e');
+    });
+  }
+
+  void _toggleMute() {
+    final player = _audioPlayer;
+    if (player == null) return;
+    setState(() => _muted = !_muted);
+    player.setVolume(_muted ? 0.0 : 1.0);
+  }
+
+  void _startMjpegStream() {
+    final url = widget.initialCamera.streamUrl;
+    if (url == null) return;
+
+    _httpClient = HttpClient()..badCertificateCallback = (_, __, ___) => true;
+    _httpClient!.getUrl(Uri.parse(url)).then((request) {
+      return request.close();
+    }).then((response) {
+      _parseMjpegStream(response);
+    }).catchError((e) {
+      if (mounted) debugPrint('MJPEG stream error: $e');
+    });
+  }
+
+  void _parseMjpegStream(HttpClientResponse response) {
+    final buffer = BytesBuilder(copy: false);
+    bool inFrame = false;
+
+    response.listen(
+      (chunk) {
+        for (int i = 0; i < chunk.length; i++) {
+          if (!inFrame) {
+            // Look for JPEG SOI marker: 0xFF 0xD8
+            if (chunk[i] == 0xFF && i + 1 < chunk.length && chunk[i + 1] == 0xD8) {
+              buffer.clear();
+              buffer.addByte(0xFF);
+              buffer.addByte(0xD8);
+              inFrame = true;
+              i++; // skip 0xD8
+            } else if (chunk[i] == 0xFF && i + 1 == chunk.length) {
+              // Edge case: 0xFF at end of chunk — peek next chunk
+              buffer.clear();
+              buffer.addByte(0xFF);
+              inFrame = true; // tentatively
+            }
+          } else {
+            buffer.addByte(chunk[i]);
+            // Look for JPEG EOI marker: 0xFF 0xD9
+            if (chunk[i] == 0xD9 && buffer.length >= 2) {
+              final bytes = buffer.toBytes();
+              if (bytes.length > 2 && bytes[bytes.length - 2] == 0xFF) {
+                if (mounted) {
+                  setState(() => _mjpegFrame = Uint8List.fromList(bytes));
+                }
+                inFrame = false;
+                buffer.clear();
+              }
+            }
+          }
+        }
+      },
+      onError: (e) {
+        if (mounted) debugPrint('MJPEG stream error: $e');
+      },
+      cancelOnError: true,
+    );
   }
 
   @override
   void dispose() {
     _sub?.cancel();
     _closeSub?.cancel();
+    _httpClient?.close(force: true);
+    _audioPlayer?.dispose();
     super.dispose();
   }
 
@@ -2496,7 +2593,9 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_current.imageBytes.isNotEmpty)
+            if (_isVideoMode)
+              _buildMjpegView()
+            else if (_current.imageBytes.isNotEmpty)
               _CameraImageWidget(imageBytes: _current.imageBytes, fit: BoxFit.cover)
             else
               const Center(
@@ -2532,10 +2631,42 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
                 ),
               ),
             ),
+            // Mute button — only shown when audio is available
+            if (_audioPlayer != null)
+              Positioned(
+                top: 20,
+                right: 72,
+                child: GestureDetector(
+                  onTap: _toggleMute,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Icon(
+                      _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildMjpegView() {
+    final frame = _mjpegFrame;
+    if (frame == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 1.5),
+      );
+    }
+    return _CameraImageWidget(imageBytes: frame, fit: BoxFit.cover);
   }
 }
 

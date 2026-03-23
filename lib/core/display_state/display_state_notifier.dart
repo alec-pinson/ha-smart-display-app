@@ -365,11 +365,27 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       final c = payload['open_camera'] as Map<String, dynamic>;
       final id = c['id'] as String;
       final name = c['name'] as String;
-      setFocusedCamera(id);
+      final streamTypeStr = c['stream_type'] as String? ?? 'snapshot';
+      final streamType = switch (streamTypeStr) {
+        'video' => CameraStreamType.video,
+        'video_audio' => CameraStreamType.videoAudio,
+        _ => CameraStreamType.snapshot,
+      };
+      final frigateUrl = c['frigate_url'] as String?;
+      final go2rtcUrl = c['go2rtc_url'] as String?;
+
+      // For snapshot mode, tell HA to start the 1fps JPEG loop
+      // For video modes, app streams directly — no JPEG loop needed
+      if (streamType == CameraStreamType.snapshot) {
+        setFocusedCamera(id);
+      }
       _openCameraController.add(CameraData(
         id: id,
         name: name,
         imageBytes: Uint8List(0),
+        streamType: streamType,
+        frigateUrl: frigateUrl,
+        go2rtcUrl: go2rtcUrl,
       ));
       _cameraAutoCloseTimer?.cancel();
       if (c.containsKey('duration')) {

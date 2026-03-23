@@ -94,16 +94,41 @@ class ForecastPeriod {
       );
 }
 
+enum CameraStreamType { snapshot, video, videoAudio }
+
 class CameraData {
   final String id;
   final String name;
   final Uint8List imageBytes;
+  final CameraStreamType streamType;
+  final String? frigateUrl;
+  final String? go2rtcUrl;
 
   const CameraData({
     required this.id,
     required this.name,
     required this.imageBytes,
+    this.streamType = CameraStreamType.snapshot,
+    this.frigateUrl,
+    this.go2rtcUrl,
   });
+
+  String get _cameraName => id.replaceFirst('camera.', '');
+
+  /// MJPEG video stream URL.
+  /// Uses Frigate's MJPEG endpoint; go2rtc MJPEG is only used as fallback if Frigate URL not set.
+  String? get streamUrl {
+    if (streamType == CameraStreamType.snapshot) return null;
+    if (frigateUrl != null) return '$frigateUrl/api/$_cameraName?h=480';
+    if (go2rtcUrl != null) return '$go2rtcUrl/api/stream.mjpeg?src=$_cameraName';
+    return null;
+  }
+
+  /// AAC audio stream URL — only available when using go2rtc and videoAudio mode.
+  String? get audioUrl {
+    if (streamType != CameraStreamType.videoAudio || go2rtcUrl == null) return null;
+    return '$go2rtcUrl/api/stream.aac?src=$_cameraName';
+  }
 }
 
 class ClimateData {
