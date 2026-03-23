@@ -44,6 +44,10 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
   // Tracks the currently-showing modal notification so we can dismiss it
   // before showing the next one (prevents scrim stacking).
   Route<void>? _currentNotificationRoute;
+  // Tracks the currently-showing camera full-screen so duplicate calls are
+  // ignored (same camera) or swapped (different camera).
+  Route<void>? _currentCameraRoute;
+  String? _currentCameraId;
 
   @override
   void initState() {
@@ -114,13 +118,30 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
 
       // Open camera stream (triggered by HA service call)
       _openCameraSub = notifier.openCameraStream.listen((camera) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            barrierColor: Colors.black,
-            builder: (_) => _CameraFullScreen(initialCamera: camera, notifier: notifier),
-          ).then((_) => notifier.setFocusedCamera(null));
+        if (!mounted) return;
+        // Same camera already open — ignore duplicate call
+        if (_currentCameraRoute != null && _currentCameraId == camera.id) return;
+        // Different camera open — close it before opening the new one
+        if (_currentCameraRoute != null) {
+          Navigator.of(context).removeRoute(_currentCameraRoute!);
+          _currentCameraRoute = null;
+          _currentCameraId = null;
+          notifier.setFocusedCamera(null);
         }
+        final route = DialogRoute<void>(
+          context: context,
+          barrierColor: Colors.black,
+          builder: (_) => _CameraFullScreen(initialCamera: camera, notifier: notifier),
+        );
+        _currentCameraRoute = route;
+        _currentCameraId = camera.id;
+        Navigator.of(context).push(route).then((_) {
+          if (_currentCameraRoute == route) {
+            _currentCameraRoute = null;
+            _currentCameraId = null;
+          }
+          notifier.setFocusedCamera(null);
+        });
       });
     });
   }
