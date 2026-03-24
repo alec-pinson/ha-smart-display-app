@@ -1287,7 +1287,7 @@ class _CameraImageWidgetState extends State<_CameraImageWidget> {
 
   Future<void> _load(Uint8List bytes) async {
     if (bytes.isEmpty) return;
-    final codec = await ui.instantiateImageCodec(bytes);
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 1280);
     final frame = await codec.getNextFrame();
     codec.dispose();
     if (!mounted) {
@@ -2492,6 +2492,7 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
 
   // MJPEG stream
   HttpClient? _httpClient;
+  StreamSubscription<List<int>>? _mjpegSub;
   Uint8List? _mjpegFrame;
 
   // Audio
@@ -2556,7 +2557,7 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
     final buffer = BytesBuilder(copy: false);
     bool inFrame = false;
 
-    response.listen(
+    _mjpegSub = response.listen(
       (chunk) {
         for (int i = 0; i < chunk.length; i++) {
           if (!inFrame) {
@@ -2600,8 +2601,11 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
   void dispose() {
     _sub?.cancel();
     _closeSub?.cancel();
+    _mjpegSub?.cancel();
     _httpClient?.close(force: true);
+    _mjpegFrame = null;
     _audioPlayer?.dispose();
+    _audioPlayer = null;
     super.dispose();
   }
 
