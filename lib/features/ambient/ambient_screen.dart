@@ -2492,9 +2492,10 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
   StreamSubscription<CameraData>? _sub;
   StreamSubscription<void>? _closeSub;
 
-  // MJPEG stream — frame-drop pipeline: only one decode in flight, latest frame wins
+  // Video stream — frame-drop pipeline: only one decode in flight, latest frame wins
   HttpClient? _httpClient;
   StreamSubscription<List<int>>? _mjpegSub;
+  bool _streamActive = false;
   ui.Image? _displayImage;
   bool _decoding = false;
   Uint8List? _pendingFrame;
@@ -2544,17 +2545,48 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
   }
 
   void _startMjpegStream() {
-    final url = widget.initialCamera.streamUrl;
-    if (url == null) return;
-
+    _streamActive = true;
     _httpClient = HttpClient()..badCertificateCallback = (_, __, ___) => true;
-    _httpClient!.getUrl(Uri.parse(url)).then((request) {
+
+    // Prefer snapshot polling over MJPEG — each request fetches the actual current
+    // frame from Frigate with no TCP buffering lag.
+    final pollUrl = widget.initialCamera.snapshotPollUrl;
+    if (pollUrl != null) {
+      _pollSnapshot(pollUrl);
+      return;
+    }
+
+    // MJPEG fallback for non-Frigate sources.
+    final mjpegUrl = widget.initialCamera.streamUrl;
+    if (mjpegUrl == null) return;
+    _httpClient!.getUrl(Uri.parse(mjpegUrl)).then((request) {
       return request.close();
     }).then((response) {
       _parseMjpegStream(response);
     }).catchError((e) {
       if (mounted) debugPrint('MJPEG stream error: $e');
     });
+  }
+
+  /// Polls Frigate's latest.jpg endpoint at ~5fps — always returns the current frame.
+  Future<void> _pollSnapshot(String url) async {
+    while (_streamActive && mounted) {
+      final start = DateTime.now();
+      try {
+        final request = await _httpClient!.getUrl(Uri.parse(url));
+        final response = await request.close();
+        if (response.statusCode == 200) {
+          final builder = BytesBuilder(copy: false);
+          await response.forEach(builder.add);
+          final bytes = builder.takeBytes();
+          if (_streamActive && mounted) _onMjpegFrame(bytes);
+        }
+      } catch (_) {}
+      if (!_streamActive || !mounted) break;
+      final elapsed = DateTime.now().difference(start).inMilliseconds;
+      final remaining = 200 - elapsed;
+      if (remaining > 0) await Future.delayed(Duration(milliseconds: remaining));
+    }
   }
 
   void _parseMjpegStream(HttpClientResponse response) {
@@ -2637,6 +2669,7 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
   void dispose() {
     _sub?.cancel();
     _closeSub?.cancel();
+    _streamActive = false;
     _mjpegSub?.cancel();
     _httpClient?.close(force: true);
     _displayImage?.dispose();

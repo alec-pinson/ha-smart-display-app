@@ -115,8 +115,16 @@ class CameraData {
 
   String get _cameraName => id.replaceFirst('camera.', '');
 
-  /// MJPEG video stream URL.
-  /// Uses Frigate's MJPEG endpoint; go2rtc MJPEG is only used as fallback if Frigate URL not set.
+  /// Snapshot poll URL — fetches the latest frame as a static JPEG from Frigate.
+  /// Preferred over MJPEG streaming because each request returns the current frame
+  /// with no TCP buffering lag.
+  String? get snapshotPollUrl {
+    if (streamType == CameraStreamType.snapshot) return null;
+    if (frigateUrl != null) return '$frigateUrl/api/$_cameraName/latest.jpg?h=480';
+    return null;
+  }
+
+  /// MJPEG fallback URL — only used when frigateUrl is not set (e.g. go2rtc-only setup).
   String? get streamUrl {
     if (streamType == CameraStreamType.snapshot) return null;
     if (frigateUrl != null) return '$frigateUrl/api/$_cameraName?h=480&fps=5';
