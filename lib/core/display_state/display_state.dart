@@ -119,7 +119,7 @@ class CameraData {
   /// Uses Frigate's MJPEG endpoint; go2rtc MJPEG is only used as fallback if Frigate URL not set.
   String? get streamUrl {
     if (streamType == CameraStreamType.snapshot) return null;
-    if (frigateUrl != null) return '$frigateUrl/api/$_cameraName?h=480';
+    if (frigateUrl != null) return '$frigateUrl/api/$_cameraName?h=480&fps=5';
     if (go2rtcUrl != null) return '$go2rtcUrl/api/stream.mjpeg?src=$_cameraName';
     return null;
   }

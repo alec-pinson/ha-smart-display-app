@@ -131,6 +131,7 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
         final route = DialogRoute<void>(
           context: context,
           barrierColor: Colors.black,
+          useSafeArea: false,
           builder: (_) => _CameraFullScreen(initialCamera: camera, notifier: notifier),
         );
         _currentCameraRoute = route;
@@ -692,6 +693,7 @@ class _NormalOverlay extends ConsumerWidget {
             showDialog(
               context: context,
               barrierColor: Colors.black,
+              useSafeArea: false,
               builder: (_) => _CameraFullScreen(
                 initialCamera: camera,
                 notifier: notifier,
@@ -2490,10 +2492,12 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
   StreamSubscription<CameraData>? _sub;
   StreamSubscription<void>? _closeSub;
 
-  // MJPEG stream
+  // MJPEG stream — frame-drop pipeline: only one decode in flight, latest frame wins
   HttpClient? _httpClient;
   StreamSubscription<List<int>>? _mjpegSub;
-  Uint8List? _mjpegFrame;
+  ui.Image? _displayImage;
+  bool _decoding = false;
+  Uint8List? _pendingFrame;
 
   // Audio
   AudioPlayer? _audioPlayer;
@@ -2580,9 +2584,7 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
             if (chunk[i] == 0xD9 && buffer.length >= 2) {
               final bytes = buffer.toBytes();
               if (bytes.length > 2 && bytes[bytes.length - 2] == 0xFF) {
-                if (mounted) {
-                  setState(() => _mjpegFrame = Uint8List.fromList(bytes));
-                }
+                if (mounted) _onMjpegFrame(Uint8List.fromList(bytes));
                 inFrame = false;
                 buffer.clear();
               }
@@ -2597,13 +2599,49 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
     );
   }
 
+  /// Called for each complete MJPEG frame. If a decode is already running,
+  /// saves this as the pending frame (overwriting any older pending frame) so
+  /// only the latest frame is decoded next — intermediate frames are dropped.
+  void _onMjpegFrame(Uint8List bytes) {
+    if (_decoding) {
+      _pendingFrame = bytes;
+      return;
+    }
+    _decoding = true;
+    _decodeNextFrame(bytes);
+  }
+
+  Future<void> _decodeNextFrame(Uint8List bytes) async {
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 800);
+    final frame = await codec.getNextFrame();
+    codec.dispose();
+    if (!mounted) {
+      frame.image.dispose();
+      _decoding = false;
+      return;
+    }
+    final old = _displayImage;
+    setState(() => _displayImage = frame.image);
+    old?.dispose();
+
+    final pending = _pendingFrame;
+    _pendingFrame = null;
+    if (pending != null) {
+      _decodeNextFrame(pending);
+    } else {
+      _decoding = false;
+    }
+  }
+
   @override
   void dispose() {
     _sub?.cancel();
     _closeSub?.cancel();
     _mjpegSub?.cancel();
     _httpClient?.close(force: true);
-    _mjpegFrame = null;
+    _displayImage?.dispose();
+    _displayImage = null;
+    _pendingFrame = null;
     _audioPlayer?.dispose();
     _audioPlayer = null;
     super.dispose();
@@ -2611,8 +2649,8 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog.fullscreen(
-      backgroundColor: Colors.black,
+    return Material(
+      color: Colors.black,
       child: GestureDetector(
         onTap: () => Navigator.of(context).pop(),
         child: Stack(
@@ -2621,7 +2659,7 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
             if (_isVideoMode)
               _buildMjpegView()
             else if (_current.imageBytes.isNotEmpty)
-              _CameraImageWidget(imageBytes: _current.imageBytes, fit: BoxFit.cover)
+              _CameraImageWidget(imageBytes: _current.imageBytes, fit: BoxFit.contain)
             else
               const Center(
                 child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 1.5),
@@ -2685,13 +2723,13 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
   }
 
   Widget _buildMjpegView() {
-    final frame = _mjpegFrame;
-    if (frame == null) {
+    final img = _displayImage;
+    if (img == null) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.white24, strokeWidth: 1.5),
       );
     }
-    return _CameraImageWidget(imageBytes: frame, fit: BoxFit.cover);
+    return RawImage(image: img, fit: BoxFit.contain);
   }
 }
 
