@@ -9,7 +9,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val systemChannel = "ha_smart_display/system"
+    private val SYSTEM_CHANNEL_NAME = "ha_smart_display/system"
+    private var systemMethodChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -25,8 +26,9 @@ class MainActivity : FlutterActivity() {
 
         // System channel — brightness + volume control
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, systemChannel)
-            .setMethodCallHandler { call, result ->
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SYSTEM_CHANNEL_NAME)
+        systemMethodChannel = channel
+        channel.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "setBrightness" -> {
                         // Negative value means auto brightness (BRIGHTNESS_OVERRIDE_NONE = -1f).
@@ -74,5 +76,12 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         // Keep screen on at the window level as a belt-and-suspenders backup
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            systemMethodChannel?.invokeMethod("onTrimMemory", level)
+        }
     }
 }

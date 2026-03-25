@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -48,6 +49,8 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
   // ignored (same camera) or swapped (different camera).
   Route<void>? _currentCameraRoute;
   String? _currentCameraId;
+  Timer? _memoryWatchdog;
+  final _systemChannel = MethodChannel('ha_smart_display/system');
 
   @override
   void initState() {
@@ -153,6 +156,27 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           _auroraController.repeat();
         }
       });
+
+      // Memory watchdog — check RSS every 5 minutes
+      _memoryWatchdog = Timer.periodic(const Duration(minutes: 5), (_) {
+        final rssMb = (ProcessInfo.currentRss / (1024 * 1024)).round();
+        if (rssMb > 350) {
+          debugPrint('MemoryWatchdog: RSS=${rssMb}MB — clearing caches');
+          PaintingBinding.instance.imageCache.clear();
+          PaintingBinding.instance.imageCache.clearLiveImages();
+          DefaultCacheManager().emptyCache();
+        }
+      });
+
+      // Handle onTrimMemory from Android
+      _systemChannel.setMethodCallHandler((call) async {
+        if (call.method == 'onTrimMemory') {
+          debugPrint('onTrimMemory: level=${call.arguments}');
+          PaintingBinding.instance.imageCache.clear();
+          PaintingBinding.instance.imageCache.clearLiveImages();
+          DefaultCacheManager().emptyCache();
+        }
+      });
     });
   }
 
@@ -245,6 +269,8 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
     _openCameraSub?.cancel();
     _voiceStateSub?.cancel();
     _wakeWordDetectionSub?.cancel();
+    _memoryWatchdog?.cancel();
+    _systemChannel.setMethodCallHandler(null);
     super.dispose();
   }
 

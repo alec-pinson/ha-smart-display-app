@@ -127,6 +127,7 @@ class TimerService {
 
   /// Called by HA siren_sounding switch turning OFF
   Future<void> stopHaSiren() async {
+    await _sirenPlayer?.stop();
     _sirenPlayer?.dispose();
     _sirenPlayer = null;
     if (_preSirenVolume != null) {
