@@ -144,6 +144,15 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           notifier.setFocusedCamera(null);
         });
       });
+
+      // Stop aurora animation during ambient mode to save CPU/GPU/memory
+      ref.listen<DisplayState>(displayStateProvider, (prev, next) {
+        if (next.ambientActive && !(prev?.ambientActive ?? false)) {
+          _auroraController.stop();
+        } else if (!next.ambientActive && (prev?.ambientActive ?? false)) {
+          _auroraController.repeat();
+        }
+      });
     });
   }
 
