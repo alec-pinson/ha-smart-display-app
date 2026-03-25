@@ -586,17 +586,16 @@ class _NormalOverlay extends ConsumerWidget {
   final DisplayState state;
   const _NormalOverlay({super.key, required this.state});
 
-  static const _modes = ['clock', 'weather', 'cameras', 'music'];
-
   void _onSwipe(DragEndDetails details, WidgetRef ref) {
     final v = details.primaryVelocity;
     if (v == null || v.abs() < 300) return;
-    final current = _modes.indexOf(state.ambientMode);
+    final modes = state.availableModes;
+    final current = modes.indexOf(state.ambientMode);
     if (current == -1) return;
     final next = v < 0
-        ? (current + 1) % _modes.length        // swipe left → next
-        : (current - 1 + _modes.length) % _modes.length; // swipe right → previous
-    ref.read(displayStateProvider.notifier).setAmbientMode(_modes[next]);
+        ? (current + 1) % modes.length        // swipe left → next
+        : (current - 1 + modes.length) % modes.length; // swipe right → previous
+    ref.read(displayStateProvider.notifier).setAmbientMode(modes[next]);
   }
 
   @override

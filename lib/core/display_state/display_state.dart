@@ -367,6 +367,7 @@ class DisplayState {
   final List<PillData> pills;
   final ImmichConfig? immichConfig;
   final int slideshowInterval; // seconds
+  final List<String> availableModes;
 
   const DisplayState({
     required this.wakeWord,
@@ -396,6 +397,7 @@ class DisplayState {
     this.pills = const [],
     this.immichConfig,
     this.slideshowInterval = 60,
+    this.availableModes = const ['clock', 'weather', 'cameras', 'music'],
   });
 
   DisplayState copyWith({
@@ -427,6 +429,7 @@ class DisplayState {
     List<PillData>? pills,
     ImmichConfig? immichConfig,
     int? slideshowInterval,
+    List<String>? availableModes,
   }) {
     return DisplayState(
       wakeWord: wakeWord ?? this.wakeWord,
@@ -456,6 +459,7 @@ class DisplayState {
       pills: pills ?? this.pills,
       immichConfig: immichConfig ?? this.immichConfig,
       slideshowInterval: slideshowInterval ?? this.slideshowInterval,
+      availableModes: availableModes ?? this.availableModes,
     );
   }
 

@@ -138,6 +138,10 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     });
     if (state.ambientActive) {
       state = state.copyWith(ambientActive: false);
+      // Restore brightness unless HA has auto brightness on
+      if (!state.autoBrightness) {
+        _applyBrightness(state.brightness);
+      }
       _pushState();
     }
   }
@@ -299,6 +303,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       newState = newState.copyWith(microphoneMuted: muted);
       _storage.write(key: _microphoneMutedKey, value: muted.toString());
     }
+    if (payload.containsKey('display_modes')) {
+      final modes = (payload['display_modes'] as List).cast<String>();
+      final currentMode = newState.ambientMode;
+      newState = newState.copyWith(
+        availableModes: modes,
+        ambientMode: modes.contains(currentMode) ? currentMode : 'clock',
+      );
+    }
     if (payload.containsKey('ambient_mode')) {
       newState = newState.copyWith(ambientMode: payload['ambient_mode'] as String);
     }
@@ -306,7 +318,17 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       final wantActive = payload['ambient_active'] as bool;
       // Ignore re-activation while suppressed (user tapped to dismiss ambient)
       if (!wantActive || _ambientSuppressTimer == null) {
+        final wasActive = newState.ambientActive;
         newState = newState.copyWith(ambientActive: wantActive);
+        if (wantActive && !wasActive) {
+          // Entering ambient: force auto brightness without touching HA's setting
+          _applyBrightness(-1);
+        } else if (!wantActive && wasActive) {
+          // Leaving ambient: restore brightness unless HA has auto brightness on
+          if (!newState.autoBrightness) {
+            _applyBrightness(newState.brightness);
+          }
+        }
       }
     }
     if (payload.containsKey('auto_brightness')) {
