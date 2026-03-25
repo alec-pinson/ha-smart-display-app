@@ -519,7 +519,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
       final sounding = payload['alarm_sounding'] as bool;
       final timerService = _ref.read(timerServiceProvider);
       if (sounding) {
-        timerService.startHaAlarm();
+        unawaited(timerService.startHaAlarm());
       } else {
         timerService.stopHaAlarm();
       }

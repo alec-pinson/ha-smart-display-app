@@ -27,8 +27,8 @@ class VoiceAssistantService {
   VoiceAssistantState get state => _state;
 
   final _recorder = AudioRecorder();
-  final _ttsPlayer = AudioPlayer();
-  final _triggerPlayer = AudioPlayer();
+  AudioPlayer? _ttsPlayer;
+  AudioPlayer? _triggerPlayer;
   bool _isRecordingCommand = false;
   Timer? _processingTimeout;
   Timer? _musicResumeTimer;
@@ -74,13 +74,17 @@ class VoiceAssistantService {
     // doesn't grab audio focus mid-playback and cut the sound off
     if (displayState.wakeWordSound) {
       try {
-        await _triggerPlayer.setLoopMode(LoopMode.off);
-        await _triggerPlayer.setAsset('assets/audio/wake_word_triggered.mp3');
-        final completedFuture = _triggerPlayer.processingStateStream
+        _triggerPlayer?.dispose();
+        _triggerPlayer = AudioPlayer();
+        await _triggerPlayer!.setLoopMode(LoopMode.off);
+        await _triggerPlayer!.setAsset('assets/audio/wake_word_triggered.mp3');
+        final completedFuture = _triggerPlayer!.processingStateStream
             .firstWhere((s) => s == ProcessingState.completed)
             .timeout(const Duration(seconds: 3), onTimeout: () => ProcessingState.idle);
-        await _triggerPlayer.play();
+        await _triggerPlayer!.play();
         await completedFuture;
+        _triggerPlayer?.dispose();
+        _triggerPlayer = null;
       } catch (e) {
         _log.w('VoiceAssistant: could not play trigger sound: $e');
       }
@@ -131,19 +135,23 @@ class VoiceAssistantService {
 
   Future<void> _playTts(String url) async {
     try {
-      await _ttsPlayer.setUrl(url);
+      _ttsPlayer?.dispose();
+      _ttsPlayer = AudioPlayer();
+      await _ttsPlayer!.setUrl(url);
       // Subscribe before play() to avoid missing the completed event.
       // play() alone isn't always sufficient — it can return before audio finishes.
-      final completedFuture = _ttsPlayer.processingStateStream
+      final completedFuture = _ttsPlayer!.processingStateStream
           .firstWhere((s) => s == ProcessingState.completed)
           .timeout(const Duration(seconds: 30), onTimeout: () => ProcessingState.idle);
-      await _ttsPlayer.play();
+      await _ttsPlayer!.play();
       await completedFuture;
       // Small delay after ProcessingState.completed to ensure ExoPlayer has fully
       // handed off audio to AudioTrack. The native WakeWordPlugin.resume() then
       // polls AudioManager.isMusicActive() and waits until hardware output stops
       // before unpausing detection — so we don't need a large fixed delay here.
       await Future.delayed(const Duration(milliseconds: 500));
+      _ttsPlayer?.dispose();
+      _ttsPlayer = null;
     } catch (e) {
       _log.w('VoiceAssistant: TTS playback error: $e');
     }
@@ -324,8 +332,8 @@ class VoiceAssistantService {
     _processingTimeout?.cancel();
     _musicResumeTimer?.cancel();
     _recorder.dispose();
-    _ttsPlayer.dispose();
-    _triggerPlayer.dispose();
+    _ttsPlayer?.dispose();
+    _triggerPlayer?.dispose();
     _stateController.close();
   }
 }

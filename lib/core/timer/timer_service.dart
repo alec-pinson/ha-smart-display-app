@@ -20,15 +20,15 @@ class TimerService {
   // Player for timer/alarm chime — loops until dismissed
   final _chimePlayer = AudioPlayer();
 
-  // Player for HA-triggered alarm — independent loop
-  final _haAlarmPlayer = AudioPlayer();
+  // Player for HA-triggered alarm — independent loop (lazy-init)
+  AudioPlayer? _haAlarmPlayer;
 
-  // Player for HA-triggered siren — independent loop
-  final _sirenPlayer = AudioPlayer();
+  // Player for HA-triggered siren — independent loop (lazy-init)
+  AudioPlayer? _sirenPlayer;
   int? _preSirenVolume; // saved before siren starts, restored on stop
 
-  // Player for notification sound — plays once on each notification
-  final _notificationPlayer = AudioPlayer();
+  // Player for notification sound — plays once on each notification (lazy-init)
+  AudioPlayer? _notificationPlayer;
 
   Timer? _checkTimer;
 
@@ -92,9 +92,10 @@ class TimerService {
   /// Called by HA alarm_sounding switch turning ON
   Future<void> startHaAlarm() async {
     try {
-      await _haAlarmPlayer.setLoopMode(LoopMode.one);
-      await _haAlarmPlayer.setAsset('assets/audio/timer_chime.mp3');
-      await _haAlarmPlayer.play();
+      _haAlarmPlayer ??= AudioPlayer();
+      await _haAlarmPlayer!.setLoopMode(LoopMode.one);
+      await _haAlarmPlayer!.setAsset('assets/audio/timer_chime.mp3');
+      await _haAlarmPlayer!.play();
       _log.i('TimerService: HA alarm started');
     } catch (e) {
       _log.w('TimerService: could not start HA alarm: $e');
@@ -103,7 +104,9 @@ class TimerService {
 
   /// Called by HA alarm_sounding switch turning OFF
   void stopHaAlarm() {
-    _haAlarmPlayer.stop();
+    _haAlarmPlayer?.stop();
+    _haAlarmPlayer?.dispose();
+    _haAlarmPlayer = null;
     _log.i('TimerService: HA alarm stopped');
   }
 
@@ -112,9 +115,10 @@ class TimerService {
     try {
       _preSirenVolume = _ref.read(displayStateProvider).volume;
       await _systemChannel.invokeMethod('setVolume', {'volume': 100});
-      await _sirenPlayer.setLoopMode(LoopMode.one);
-      await _sirenPlayer.setAsset('assets/audio/siren.mp3');
-      await _sirenPlayer.play();
+      _sirenPlayer ??= AudioPlayer();
+      await _sirenPlayer!.setLoopMode(LoopMode.one);
+      await _sirenPlayer!.setAsset('assets/audio/siren.mp3');
+      await _sirenPlayer!.play();
       _log.i('TimerService: HA siren started (saved volume: $_preSirenVolume)');
     } catch (e) {
       _log.w('TimerService: could not start HA siren: $e');
@@ -123,7 +127,8 @@ class TimerService {
 
   /// Called by HA siren_sounding switch turning OFF
   Future<void> stopHaSiren() async {
-    _sirenPlayer.stop();
+    _sirenPlayer?.dispose();
+    _sirenPlayer = null;
     if (_preSirenVolume != null) {
       try {
         await _systemChannel.invokeMethod('setVolume', {'volume': _preSirenVolume});
@@ -140,9 +145,19 @@ class TimerService {
   /// Called when a notification arrives from HA
   Future<void> playNotificationSound() async {
     try {
-      await _notificationPlayer.setLoopMode(LoopMode.off);
-      await _notificationPlayer.setAsset('assets/audio/notification.mp3');
-      await _notificationPlayer.play();
+      _notificationPlayer?.dispose();
+      _notificationPlayer = AudioPlayer();
+      await _notificationPlayer!.setLoopMode(LoopMode.off);
+      await _notificationPlayer!.setAsset('assets/audio/notification.mp3');
+      await _notificationPlayer!.play();
+      // Dispose after playback completes — capture player in local variable to
+      // avoid the stale-reference race if a second notification arrives before
+      // the first finishes playing.
+      final player = _notificationPlayer!;
+      player.processingStateStream
+          .firstWhere((s) => s == ProcessingState.completed)
+          .timeout(const Duration(seconds: 5), onTimeout: () => ProcessingState.idle)
+          .then((_) { player.dispose(); if (_notificationPlayer == player) _notificationPlayer = null; });
     } catch (e) {
       _log.w('TimerService: could not play notification sound: $e');
     }
@@ -152,9 +167,9 @@ class TimerService {
     _checkTimer?.cancel();
     _firingController.close();
     _chimePlayer.dispose();
-    _haAlarmPlayer.dispose();
-    _sirenPlayer.dispose();
-    _notificationPlayer.dispose();
+    _haAlarmPlayer?.dispose();
+    _sirenPlayer?.dispose();
+    _notificationPlayer?.dispose();
   }
 }
 
