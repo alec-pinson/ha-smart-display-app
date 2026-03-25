@@ -62,6 +62,12 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private var microFrontend: MicroFrontend? = null
     private var interpreter: Interpreter? = null
 
+    // Pre-allocated inference buffers — reused on every runInference() call to avoid
+    // ByteBuffer.allocateDirect() churn that leaks native memory (Android GC doesn't
+    // track native pressure from the tiny Java wrapper objects).
+    private var inputBuf: ByteBuffer? = null
+    private var outputBuf: ByteBuffer? = null
+
     private val frameBuffer = mutableListOf<FloatArray>()
     private val probabilityWindow = mutableListOf<Float>()
     private var inputScale = 1f
@@ -185,6 +191,9 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         outputScale = if (oqp.scale == 0f) 0.00390625f else oqp.scale
         Log.d(TAG, "startAll: quant in(scale=$inputScale zp=$inputZeroPoint) out(scale=$outputScale)")
         loggedSampleFeatures = false
+        inputBuf = ByteBuffer.allocateDirect(FEATURE_STRIDE * 40).also { it.order(ByteOrder.nativeOrder()) }
+        outputBuf = ByteBuffer.allocateDirect(4).also { it.order(ByteOrder.nativeOrder()) }
+        Log.d(TAG, "startAll: pre-allocated inference buffers (input=${FEATURE_STRIDE * 40}B, output=4B)")
 
         // Set up microfrontend
         microFrontend = MicroFrontend(SAMPLE_RATE, featureStepMs)
@@ -250,6 +259,8 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         resumeThread?.quitSafely(); resumeThread = null; resumeHandler = null
         microFrontend?.close(); microFrontend = null
         interpreter?.close(); interpreter = null
+        inputBuf = null
+        outputBuf = null
         frameBuffer.clear(); probabilityWindow.clear()
     }
 
@@ -282,48 +293,47 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
     private fun runInference(batch: List<FloatArray>): Float {
         val interp = interpreter ?: return 0f
+        val inBuf = inputBuf ?: return 0f
+        val outBuf = outputBuf ?: return 0f
 
         // Skip near-zero feature batches — the model outputs spuriously high probabilities
         // (~0.93) for all-zero inputs (PCAN-suppressed silence or post-reset warmup frames).
-        // Real wake word audio always has significant non-zero mel features.
         val maxFeature = batch.maxOf { frame -> frame.maxOrNull() ?: 0f }
         if (maxFeature < 1.0f) return 0f
 
-        // Fill INT8 input ByteBuffer [1 × 3 × 40]
-        val inputBuf = ByteBuffer.allocateDirect(FEATURE_STRIDE * 40)
-            .also { it.order(ByteOrder.nativeOrder()) }
+        // Fill INT8 input ByteBuffer [1 x 3 x 40] — reuse pre-allocated buffer
+        inBuf.rewind()
         for (frame in batch) {
             for (v in frame) {
                 val q = ((v / inputScale) + inputZeroPoint).roundToInt().coerceIn(-128, 127)
-                inputBuf.put(q.toByte())
+                inBuf.put(q.toByte())
             }
         }
-        inputBuf.rewind()
+        inBuf.rewind()
 
         if (!loggedSampleFeatures) {
             val q8 = batch[0].take(8).map { v ->
                 ((v / inputScale) + inputZeroPoint).roundToInt().coerceIn(-128, 127)
             }
-            val maxFeature = batch[0].max()
-            Log.d(TAG, "input INT8 (first 8): $q8  float: ${batch[0].take(8).map { "%.1f".format(it) }}  max=${"%.2f".format(maxFeature)}")
+            val maxFeat = batch[0].max()
+            Log.d(TAG, "input INT8 (first 8): $q8  float: ${batch[0].take(8).map { "%.1f".format(it) }}  max=${"%.2f".format(maxFeat)}")
             loggedSampleFeatures = true
         }
 
-        // Minimum 4 bytes — TFLite may write beyond 1 byte due to alignment/padding requirements
-        val outputBuf = ByteBuffer.allocateDirect(4).also { it.order(ByteOrder.nativeOrder()) }
+        // Reuse pre-allocated output buffer
+        outBuf.rewind()
 
         try {
-            interp.run(inputBuf, outputBuf)
+            interp.run(inBuf, outBuf)
         } catch (e: Exception) {
             Log.e(TAG, "inference error: $e")
             return 0f
         }
 
-        outputBuf.rewind()
-        val rawByte = outputBuf.get().toInt() and 0xFF
+        outBuf.rewind()
+        val rawByte = outBuf.get().toInt() and 0xFF
         val probability = rawByte * outputScale
 
-        // Log significant spikes — rawByte > 20 filters out ambient noise
         if (rawByte > 20) {
             Log.d(TAG, "spike! rawByte=$rawByte prob=${"%.4f".format(probability)}")
         }
