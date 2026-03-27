@@ -56,6 +56,17 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
   void initState() {
     super.initState();
 
+    // Memory watchdog — check RSS every 5 minutes and clear caches if above threshold
+    _memoryWatchdog = Timer.periodic(const Duration(minutes: 5), (_) {
+      final rssMb = (ProcessInfo.currentRss / (1024 * 1024)).round();
+      debugPrint('MemoryWatchdog: RSS=${rssMb}MB');
+      if (rssMb > 350) {
+        PaintingBinding.instance.imageCache.clear();
+        PaintingBinding.instance.imageCache.clearLiveImages();
+        DefaultCacheManager().emptyCache();
+      }
+    });
+
     _auroraController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
@@ -154,17 +165,6 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
           _auroraController.stop();
         } else if (!next.ambientActive && (prev?.ambientActive ?? false)) {
           _auroraController.repeat();
-        }
-      });
-
-      // Memory watchdog — check RSS every 5 minutes
-      _memoryWatchdog = Timer.periodic(const Duration(minutes: 5), (_) {
-        final rssMb = (ProcessInfo.currentRss / (1024 * 1024)).round();
-        if (rssMb > 350) {
-          debugPrint('MemoryWatchdog: RSS=${rssMb}MB — clearing caches');
-          PaintingBinding.instance.imageCache.clear();
-          PaintingBinding.instance.imageCache.clearLiveImages();
-          DefaultCacheManager().emptyCache();
         }
       });
 
