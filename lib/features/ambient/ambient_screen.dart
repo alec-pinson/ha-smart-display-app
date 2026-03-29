@@ -56,11 +56,19 @@ class _AmbientScreenState extends ConsumerState<AmbientScreen>
   void initState() {
     super.initState();
 
-    // Memory watchdog — check RSS every 5 minutes and clear caches if above threshold
+    // Memory watchdog — check RSS every 5 minutes, clear caches or restart if high.
+    // Profile build baseline is ~420MB RSS; thresholds are set well above that.
     _memoryWatchdog = Timer.periodic(const Duration(minutes: 5), (_) {
       final rssMb = (ProcessInfo.currentRss / (1024 * 1024)).round();
       debugPrint('MemoryWatchdog: RSS=${rssMb}MB');
-      if (rssMb > 350) {
+      if (rssMb > 520) {
+        // RSS is dangerously high — restart cleanly before the OS kills us.
+        // Use the MethodChannel restart (startActivity+finish) rather than exit(0)
+        // as exit(0) does not reliably trigger auto-restart on this LineageOS device.
+        debugPrint('MemoryWatchdog: RSS critically high, restarting');
+        _systemChannel.invokeMethod('restart');
+      } else if (rssMb > 470) {
+        debugPrint('MemoryWatchdog: RSS elevated, clearing caches');
         PaintingBinding.instance.imageCache.clear();
         PaintingBinding.instance.imageCache.clearLiveImages();
         DefaultCacheManager().emptyCache();
