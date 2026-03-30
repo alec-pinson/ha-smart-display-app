@@ -3261,8 +3261,13 @@ class _Pill extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconData = _iconMap[pill.icon];
     final bg = _parseColor(pill.color) ?? Colors.white.withOpacity(0.15);
+    final (double padH, double padV, double iconSz, double fontSize) = switch (pill.size) {
+      'small' => (8.0, 4.0, 12.0, 11.0),
+      'large'  => (16.0, 8.0, 20.0, 17.0),
+      _        => (12.0, 6.0, 16.0, 14.0),
+    };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(50),
@@ -3271,12 +3276,12 @@ class _Pill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (iconData != null) ...[
-            Icon(iconData, color: Colors.white, size: 16),
-            const SizedBox(width: 6),
+            Icon(iconData, color: Colors.white, size: iconSz),
+            SizedBox(width: iconSz * 0.375),
           ],
           Text(
             pill.text,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: TextStyle(color: Colors.white, fontSize: fontSize),
           ),
         ],
       ),

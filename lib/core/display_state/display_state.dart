@@ -307,6 +307,7 @@ class PillData {
   final String? icon;
   final String? color;
   final String position;
+  final String size;
 
   const PillData({
     required this.id,
@@ -314,6 +315,7 @@ class PillData {
     this.icon,
     this.color,
     this.position = 'under_clock',
+    this.size = 'medium',
   });
 
   factory PillData.fromJson(Map<String, dynamic> j) => PillData(
@@ -322,6 +324,7 @@ class PillData {
     icon: j['icon'] as String?,
     color: j['color'] as String?,
     position: j['position'] as String? ?? 'under_clock',
+    size: j['size'] as String? ?? 'medium',
   );
 }
 
