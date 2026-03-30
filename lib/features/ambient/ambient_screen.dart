@@ -3262,9 +3262,9 @@ class _Pill extends StatelessWidget {
     final iconData = _iconMap[pill.icon];
     final bg = _parseColor(pill.color) ?? Colors.white.withOpacity(0.15);
     final (double padH, double padV, double iconSz, double fontSize) = switch (pill.size) {
-      'small' => (8.0, 4.0, 12.0, 11.0),
-      'large'  => (16.0, 8.0, 20.0, 17.0),
-      _        => (12.0, 6.0, 16.0, 14.0),
+      'small' => (16.0, 8.0, 20.0, 17.0),
+      'large'  => (24.0, 12.0, 28.0, 24.0),
+      _        => (20.0, 10.0, 24.0, 20.0),
     };
     return Container(
       padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
