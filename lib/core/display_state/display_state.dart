@@ -99,7 +99,7 @@ enum CameraStreamType { snapshot, video, videoAudio }
 class CameraData {
   final String id;
   final String name;
-  final Uint8List imageBytes;
+  final Uint8List? imageBytes;
   final CameraStreamType streamType;
   final String? frigateUrl;
   final String? go2rtcUrl;
@@ -107,11 +107,30 @@ class CameraData {
   const CameraData({
     required this.id,
     required this.name,
-    required this.imageBytes,
+    this.imageBytes,
     this.streamType = CameraStreamType.snapshot,
     this.frigateUrl,
     this.go2rtcUrl,
   });
+
+  CameraData copyWith({
+    String? id,
+    String? name,
+    Uint8List? imageBytes,
+    bool clearImageBytes = false,
+    CameraStreamType? streamType,
+    String? frigateUrl,
+    String? go2rtcUrl,
+  }) {
+    return CameraData(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      imageBytes: clearImageBytes ? null : (imageBytes ?? this.imageBytes),
+      streamType: streamType ?? this.streamType,
+      frigateUrl: frigateUrl ?? this.frigateUrl,
+      go2rtcUrl: go2rtcUrl ?? this.go2rtcUrl,
+    );
+  }
 
   String get _cameraName => id.replaceFirst('camera.', '');
 
