@@ -8,7 +8,6 @@ import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
 import 'package:record/record.dart';
 
-import '../display_state/display_state.dart';
 import '../display_state/display_state_notifier.dart';
 import '../media/media_player_service.dart';
 import '../server/display_server.dart';
@@ -32,7 +31,6 @@ class VoiceAssistantService {
   bool _isRecordingCommand = false;
   Timer? _processingTimeout;
   Timer? _musicResumeTimer;
-  bool _musicWasPlaying = false;
 
   // VAD config
   static const _maxDurationMs = 10000;
@@ -63,12 +61,8 @@ class VoiceAssistantService {
 
     // Pause music if playing — will resume after voice response unless a stop command came through
     final mediaSvc = _ref.read(mediaPlayerServiceProvider);
+    await mediaSvc.pauseForDucking();
     final displayState = _ref.read(displayStateProvider);
-    final mediaState = displayState.mediaState;
-    _musicWasPlaying = mediaState == MediaPlayerState.playing || mediaState == MediaPlayerState.buffering;
-    if (_musicWasPlaying) {
-      await mediaSvc.pause();
-    }
 
     // Play trigger sound if enabled — awaited to completion so the recorder
     // doesn't grab audio focus mid-playback and cut the sound off
@@ -164,14 +158,11 @@ class VoiceAssistantService {
     // Resume music after a delay so the native wake word cooldown is established
     // before music audio hits the mic (prevents false re-triggering).
     // MediaPlayerService.resume() is a no-op if state is idle (e.g. "stop music" command).
-    if (_musicWasPlaying) {
-      _musicWasPlaying = false;
-      _musicResumeTimer?.cancel();
-      _musicResumeTimer = Timer(const Duration(milliseconds: 1500), () {
-        _musicResumeTimer = null;
-        _ref.read(mediaPlayerServiceProvider).resume();
-      });
-    }
+    _musicResumeTimer?.cancel();
+    _musicResumeTimer = Timer(const Duration(milliseconds: 1500), () {
+      _musicResumeTimer = null;
+      _ref.read(mediaPlayerServiceProvider).resumeAfterDucking();
+    });
   }
 
   Future<Uint8List?> _recordCommand() async {
