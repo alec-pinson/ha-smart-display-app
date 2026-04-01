@@ -63,6 +63,7 @@ class TimerService {
   }
 
   Future<void> _startChimeLoop() async {
+    if (_chimePlayer != null) return;  // already playing, don't double-duck
     try {
       final mediaSvc = _ref.read(mediaPlayerServiceProvider);
       await mediaSvc.pauseForDucking();
@@ -72,6 +73,7 @@ class TimerService {
       await _chimePlayer!.play();
     } catch (e) {
       _log.w('TimerService: could not play chime: $e');
+      _ref.read(mediaPlayerServiceProvider).resumeAfterDucking();
     }
   }
 
@@ -161,6 +163,11 @@ class TimerService {
           .firstWhere((s) => s == ProcessingState.completed)
           .timeout(const Duration(seconds: 5), onTimeout: () => ProcessingState.idle)
           .then((_) {
+            player.dispose();
+            if (_notificationPlayer == player) _notificationPlayer = null;
+            mediaSvc.resumeAfterDucking();
+          })
+          .catchError((_) {
             player.dispose();
             if (_notificationPlayer == player) _notificationPlayer = null;
             mediaSvc.resumeAfterDucking();
