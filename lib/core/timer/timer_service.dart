@@ -63,16 +63,18 @@ class TimerService {
   }
 
   Future<void> _startChimeLoop() async {
-    if (_chimePlayer != null) return;  // already playing, don't double-duck
+    if (_chimePlayer != null) return;
+    _chimePlayer = AudioPlayer(); // assign before first await to prevent re-entry
     try {
       final mediaSvc = _ref.read(mediaPlayerServiceProvider);
       await mediaSvc.pauseForDucking();
-      _chimePlayer ??= AudioPlayer();
       await _chimePlayer!.setLoopMode(LoopMode.one);
       await _chimePlayer!.setAsset('assets/audio/timer_chime.mp3');
       await _chimePlayer!.play();
     } catch (e) {
       _log.w('TimerService: could not play chime: $e');
+      _chimePlayer?.dispose();
+      _chimePlayer = null;
       _ref.read(mediaPlayerServiceProvider).resumeAfterDucking();
     }
   }
