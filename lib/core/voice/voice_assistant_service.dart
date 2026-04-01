@@ -157,7 +157,7 @@ class VoiceAssistantService {
     _setState(VoiceAssistantState.idle);
     // Resume music after a delay so the native wake word cooldown is established
     // before music audio hits the mic (prevents false re-triggering).
-    // MediaPlayerService.resume() is a no-op if state is idle (e.g. "stop music" command).
+    // MediaPlayerService.resumeAfterDucking() is a no-op if nothing was ducked (e.g. "stop music" command).
     _musicResumeTimer?.cancel();
     _musicResumeTimer = Timer(const Duration(milliseconds: 1500), () {
       _musicResumeTimer = null;
