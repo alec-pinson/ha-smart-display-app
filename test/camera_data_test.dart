@@ -18,7 +18,7 @@ void main() {
 
     test('copyWith clears imageBytes to null', () {
       final cam = CameraData(id: 'camera.test', name: 'Test', imageBytes: bytes);
-      final cleared = cam.copyWith(imageBytes: null, clearImageBytes: true);
+      final cleared = cam.copyWith(clearImageBytes: true);
       expect(cleared.imageBytes, isNull);
       expect(cleared.id, 'camera.test');
       expect(cleared.name, 'Test');
@@ -36,6 +36,19 @@ void main() {
       final newBytes = Uint8List.fromList([4, 5, 6]);
       final updated = cam.copyWith(imageBytes: newBytes);
       expect(updated.imageBytes, same(newBytes));
+    });
+
+    test('copyWith: clearImageBytes wins over supplied imageBytes', () {
+      final cam = CameraData(id: 'camera.test', name: 'Test', imageBytes: bytes);
+      final newBytes = Uint8List.fromList([4, 5, 6]);
+      final cleared = cam.copyWith(imageBytes: newBytes, clearImageBytes: true);
+      expect(cleared.imageBytes, isNull);
+    });
+
+    test('copyWith preserves null imageBytes without clearing', () {
+      const cam = CameraData(id: 'camera.test', name: 'Test');
+      final copied = cam.copyWith(name: 'Other');
+      expect(copied.imageBytes, isNull);
     });
   });
 }

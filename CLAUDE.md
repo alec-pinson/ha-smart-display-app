@@ -112,7 +112,7 @@ Swipe left/right on _NormalOverlay → _onSwipe() → setAmbientMode(next/prev i
 | `BrowseResult`  | `category`, `items: List<BrowseItem>`                                          |
 | `WeatherData`   | `condition`, `temperature`, `temperatureUnit`, `humidity`, `windSpeed`, `forecast` |
 | `ForecastPeriod`| `datetime`, `temperature`, `condition`, `precipitationProbability`             |
-| `CameraData`    | `id`, `name`, `imageBytes` (Uint8List), `streamType` (snapshot/video/videoAudio), `frigateUrl?`, `go2rtcUrl?`; `streamUrl` → Frigate MJPEG (fallback go2rtc MJPEG); `audioUrl` → go2rtc AAC (videoAudio only) |
+| `CameraData`    | `id`, `name`, `imageBytes` (Uint8List?), `streamType` (snapshot/video/videoAudio), `frigateUrl?`, `go2rtcUrl?`; `streamUrl` → Frigate MJPEG (fallback go2rtc MJPEG); `audioUrl` → go2rtc AAC (videoAudio only) |
 | `TimerData`     | `id`, `label`, `endsAt` (uses `remaining_seconds` from HA if present)          |
 | `AlarmData`     | `id`, `label`, `time` (HH:MM — seconds stripped from HA time selector output)  |
 | `ClimateData`   | `name`, `currentTemperature`, `humidity`, `targetTemperature`, `hvacMode`, `hvacModes`, `minTemp`, `maxTemp`, `unit` |
