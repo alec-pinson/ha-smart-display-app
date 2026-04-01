@@ -15,15 +15,21 @@ class MediaStatus {
 }
 
 class MediaPlayerService {
-  final _player = AudioPlayer();
   final _statusController = StreamController<MediaStatus>.broadcast();
   StreamSubscription? _playerStateSub;
   MediaPlayerState _currentState = MediaPlayerState.idle;
+  AudioPlayer? _player;
+  bool _wasPlayingBeforeDuck = false;
 
   Stream<MediaStatus> get statusStream => _statusController.stream;
 
-  MediaPlayerService() {
-    _playerStateSub = _player.playerStateStream.listen(_onPlayerState);
+  bool get _isPlaying => _currentState == MediaPlayerState.playing;
+
+  AudioPlayer _ensurePlayer() {
+    if (_player != null) return _player!;
+    _player = AudioPlayer();
+    _playerStateSub = _player!.playerStateStream.listen(_onPlayerState);
+    return _player!;
   }
 
   void _onPlayerState(PlayerState ps) {
@@ -32,13 +38,28 @@ class MediaPlayerService {
     if (_currentState != prev) {
       _emit();
     }
+    // Release when transitioning TO completed/idle FROM a non-idle state.
+    // The guard on `prev` prevents releasing the player immediately after creation,
+    // since a new AudioPlayer emits an initial idle event before setUrl is called.
+    if (prev != MediaPlayerState.idle &&
+        (ps.processingState == ProcessingState.completed ||
+         ps.processingState == ProcessingState.idle)) {
+      _releasePlayer();
+    }
+  }
+
+  void _releasePlayer() {
+    _playerStateSub?.cancel();
+    _playerStateSub = null;
+    _player?.dispose();
+    _player = null;
   }
 
   void _emit() {
     if (_statusController.isClosed) return;
     _statusController.add(MediaStatus(
       state: _currentState,
-      positionMs: _player.position.inMilliseconds,
+      positionMs: _player?.position.inMilliseconds ?? 0,
     ));
   }
 
@@ -56,35 +77,52 @@ class MediaPlayerService {
 
   Future<void> play(String url) async {
     try {
-      await _player.setUrl(url);
-      await _player.play();
+      final player = _ensurePlayer();
+      await player.setUrl(url);
+      await player.play();
     } catch (e) {
       _log.w('MediaPlayerService: play failed: $e');
     }
   }
 
   Future<void> pause() async {
-    await _player.pause();
+    await _player?.pause();
   }
 
   Future<void> resume() async {
     if (_currentState == MediaPlayerState.paused) {
-      await _player.play();
+      await _player?.play();
     }
   }
 
   Future<void> stop() async {
-    await _player.stop();
+    await _player?.stop();
+    // stop() triggers processingState == idle → _onPlayerState → _releasePlayer
   }
 
   Future<void> seek(int ms) async {
-    await _player.seek(Duration(milliseconds: ms));
+    await _player?.seek(Duration(milliseconds: ms));
+  }
+
+  /// Pauses media for a transient sound. Records whether it was playing so
+  /// [resumeAfterDucking] can conditionally resume.
+  Future<void> pauseForDucking() async {
+    _wasPlayingBeforeDuck = _isPlaying;
+    if (_isPlaying) await _player?.pause();
+  }
+
+  /// Resumes media after a transient sound, but only if it was playing before
+  /// [pauseForDucking] was called.
+  Future<void> resumeAfterDucking() async {
+    if (_wasPlayingBeforeDuck) await _player?.play();
+    _wasPlayingBeforeDuck = false;
   }
 
   void dispose() {
     _playerStateSub?.cancel();
     _statusController.close();
-    _player.dispose();
+    _player?.dispose();
+    _player = null;
   }
 }
 
