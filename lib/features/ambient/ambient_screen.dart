@@ -1304,7 +1304,7 @@ class _PhotoImageLoaderState extends State<_PhotoImageLoader> {
 // ---------------------------------------------------------------------------
 
 class _CameraImageWidget extends StatefulWidget {
-  final Uint8List imageBytes;
+  final Uint8List? imageBytes;
   final BoxFit fit;
   const _CameraImageWidget({required this.imageBytes, this.fit = BoxFit.cover});
 
@@ -1318,14 +1318,20 @@ class _CameraImageWidgetState extends State<_CameraImageWidget> {
   @override
   void initState() {
     super.initState();
-    _load(widget.imageBytes);
+    if (widget.imageBytes != null) _load(widget.imageBytes!);
   }
 
   @override
   void didUpdateWidget(_CameraImageWidget old) {
     super.didUpdateWidget(old);
     if (!identical(widget.imageBytes, old.imageBytes)) {
-      _load(widget.imageBytes);
+      if (widget.imageBytes != null) {
+        _load(widget.imageBytes!);
+      } else {
+        final oldImage = _image;
+        setState(() => _image = null);
+        oldImage?.dispose();
+      }
     }
   }
 
@@ -2733,7 +2739,7 @@ class _CameraFullScreenState extends State<_CameraFullScreen> {
           children: [
             if (_isVideoMode)
               _buildMjpegView()
-            else if (_current.imageBytes.isNotEmpty)
+            else if (_current.imageBytes?.isNotEmpty ?? false)
               _CameraImageWidget(imageBytes: _current.imageBytes, fit: BoxFit.contain)
             else
               const Center(
