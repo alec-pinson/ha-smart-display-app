@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:logger/logger.dart';
 
-import '../display_state/display_state.dart';
 import '../display_state/display_state_notifier.dart';
+import '../media/media_player_service.dart';
 
 const _systemChannel = MethodChannel('ha_smart_display/system');
 
@@ -17,17 +17,11 @@ class TimerService {
   final _firedTimers = <String>{};
   final _firedAlarms = <String>{};
 
-  // Player for timer/alarm chime — loops until dismissed
-  final _chimePlayer = AudioPlayer();
-
-  // Player for HA-triggered alarm — independent loop (lazy-init)
+  // All players are lazy — created when needed, disposed when done.
+  AudioPlayer? _chimePlayer;
   AudioPlayer? _haAlarmPlayer;
-
-  // Player for HA-triggered siren — independent loop (lazy-init)
   AudioPlayer? _sirenPlayer;
-  int? _preSirenVolume; // saved before siren starts, restored on stop
-
-  // Player for notification sound — plays once on each notification (lazy-init)
+  int? _preSirenVolume;
   AudioPlayer? _notificationPlayer;
 
   Timer? _checkTimer;
@@ -70,9 +64,12 @@ class TimerService {
 
   Future<void> _startChimeLoop() async {
     try {
-      await _chimePlayer.setLoopMode(LoopMode.one);
-      await _chimePlayer.setAsset('assets/audio/timer_chime.mp3');
-      await _chimePlayer.play();
+      final mediaSvc = _ref.read(mediaPlayerServiceProvider);
+      await mediaSvc.pauseForDucking();
+      _chimePlayer ??= AudioPlayer();
+      await _chimePlayer!.setLoopMode(LoopMode.one);
+      await _chimePlayer!.setAsset('assets/audio/timer_chime.mp3');
+      await _chimePlayer!.play();
     } catch (e) {
       _log.w('TimerService: could not play chime: $e');
     }
@@ -86,7 +83,10 @@ class TimerService {
     } else {
       notifier.dismissAlarm(alert.id);
     }
-    _chimePlayer.stop();
+    _chimePlayer?.stop();
+    _chimePlayer?.dispose();
+    _chimePlayer = null;
+    _ref.read(mediaPlayerServiceProvider).resumeAfterDucking();
   }
 
   /// Called by HA alarm_sounding switch turning ON
@@ -145,6 +145,8 @@ class TimerService {
 
   /// Called when a notification arrives from HA
   Future<void> playNotificationSound() async {
+    final mediaSvc = _ref.read(mediaPlayerServiceProvider);
+    await mediaSvc.pauseForDucking();
     try {
       _notificationPlayer?.dispose();
       _notificationPlayer = AudioPlayer();
@@ -158,16 +160,21 @@ class TimerService {
       player.processingStateStream
           .firstWhere((s) => s == ProcessingState.completed)
           .timeout(const Duration(seconds: 5), onTimeout: () => ProcessingState.idle)
-          .then((_) { player.dispose(); if (_notificationPlayer == player) _notificationPlayer = null; });
+          .then((_) {
+            player.dispose();
+            if (_notificationPlayer == player) _notificationPlayer = null;
+            mediaSvc.resumeAfterDucking();
+          });
     } catch (e) {
       _log.w('TimerService: could not play notification sound: $e');
+      mediaSvc.resumeAfterDucking();
     }
   }
 
   void dispose() {
     _checkTimer?.cancel();
     _firingController.close();
-    _chimePlayer.dispose();
+    _chimePlayer?.dispose();
     _haAlarmPlayer?.dispose();
     _sirenPlayer?.dispose();
     _notificationPlayer?.dispose();
