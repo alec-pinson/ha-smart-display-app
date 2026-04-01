@@ -236,7 +236,7 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     _musicInactiveTimer = null;
     var newState = state;
     if (newState.ambientMode == 'music') {
-      newState = newState.copyWith(ambientMode: 'clock');
+      newState = _applyModeChange(newState, 'clock');
     }
     newState = newState.copyWith(clearMediaTrack: true, mediaState: MediaPlayerState.idle);
     state = newState;
