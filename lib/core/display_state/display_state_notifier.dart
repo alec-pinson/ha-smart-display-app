@@ -306,13 +306,12 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     if (payload.containsKey('display_modes')) {
       final modes = (payload['display_modes'] as List).cast<String>();
       final currentMode = newState.ambientMode;
-      newState = newState.copyWith(
-        availableModes: modes,
-        ambientMode: modes.contains(currentMode) ? currentMode : 'clock',
-      );
+      final newMode = modes.contains(currentMode) ? currentMode : 'clock';
+      newState = newState.copyWith(availableModes: modes);
+      newState = _applyModeChange(newState, newMode);
     }
     if (payload.containsKey('ambient_mode')) {
-      newState = newState.copyWith(ambientMode: payload['ambient_mode'] as String);
+      newState = _applyModeChange(newState, payload['ambient_mode'] as String);
     }
     if (payload.containsKey('ambient_active')) {
       final wantActive = payload['ambient_active'] as bool;
@@ -639,8 +638,20 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   }
 
   void setAmbientMode(String mode) {
-    state = state.copyWith(ambientMode: mode);
+    state = _applyModeChange(state, mode);
     _pushState();
+  }
+
+  /// Applies an ambient mode change, clearing camera snapshot bytes when leaving
+  /// cameras mode to free memory.
+  DisplayState _applyModeChange(DisplayState current, String mode) {
+    var next = current.copyWith(ambientMode: mode);
+    if (mode != 'cameras') {
+      next = next.copyWith(
+        cameras: next.cameras.map((c) => c.copyWith(clearImageBytes: true)).toList(),
+      );
+    }
+    return next;
   }
 
   void sendBrowseRequest(String category) {
