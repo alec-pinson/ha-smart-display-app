@@ -41,6 +41,8 @@ class MediaPlayerService {
     // Release when transitioning TO completed/idle FROM a non-idle state.
     // The guard on `prev` prevents releasing the player immediately after creation,
     // since a new AudioPlayer emits an initial idle event before setUrl is called.
+    // _emit() must be called before _releasePlayer() so the final status
+    // event reports the correct position before _player is nulled.
     if (prev != MediaPlayerState.idle &&
         (ps.processingState == ProcessingState.completed ||
          ps.processingState == ProcessingState.idle)) {
@@ -53,6 +55,7 @@ class MediaPlayerService {
     _playerStateSub = null;
     _player?.dispose();
     _player = null;
+    _wasPlayingBeforeDuck = false;
   }
 
   void _emit() {
