@@ -78,6 +78,14 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private var inputZeroPoint = 0
     private var outputScale = 0.00390625f
     private var cooldownFrames = 0
+
+    // Pre-roll ring buffer — stores last 500ms of raw PCM for command recording
+    private val PRE_ROLL_SAMPLES = SAMPLE_RATE / 2  // 8000 samples = 500ms at 16kHz
+    private var preRollBuffer = ShortArray(PRE_ROLL_SAMPLES)
+    private var preRollWritePos = 0
+    private var preRollFilled = false
+    private var preRollSnapshot: ShortArray? = null
+
     private var loggedSampleFeatures = false
 
     // Peak probability tracked since last reset (including during cooldown frames).
@@ -287,6 +295,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         interpreter?.close(); interpreter = null
         inputBuf = null
         outputBuf = null
+        preRollWritePos = 0; preRollFilled = false; preRollSnapshot = null
         frameBuffer.clear(); probabilityWindow.clear()
     }
 
@@ -297,6 +306,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         while (running) {
             val read = record.read(buffer, 0, samplesPerStep)
             if (read <= 0 || paused) continue
+            writePreRoll(buffer, read)
 
             val fe = microFrontend ?: break
 
@@ -415,6 +425,27 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     }
 
     // ── Asset loading ─────────────────────────────────────────────────────────
+
+    private fun writePreRoll(buffer: ShortArray, count: Int) {
+        for (i in 0 until count) {
+            preRollBuffer[preRollWritePos] = buffer[i]
+            preRollWritePos = (preRollWritePos + 1) % PRE_ROLL_SAMPLES
+            if (preRollWritePos == 0) preRollFilled = true
+        }
+    }
+
+    private fun snapshotPreRoll(): ShortArray {
+        val size = if (preRollFilled) PRE_ROLL_SAMPLES else preRollWritePos
+        val snapshot = ShortArray(size)
+        if (preRollFilled) {
+            val tail = PRE_ROLL_SAMPLES - preRollWritePos
+            System.arraycopy(preRollBuffer, preRollWritePos, snapshot, 0, tail)
+            System.arraycopy(preRollBuffer, 0, snapshot, tail, preRollWritePos)
+        } else {
+            System.arraycopy(preRollBuffer, 0, snapshot, 0, preRollWritePos)
+        }
+        return snapshot
+    }
 
     private fun loadModelFromAssets(wakeWord: String): ByteBuffer? {
         return try {
