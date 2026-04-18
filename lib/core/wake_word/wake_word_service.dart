@@ -69,7 +69,17 @@ class WakeWordService {
     // Listen for "detected" events from the native pipeline
     _eventsSub = _eventsChannel.receiveBroadcastStream().listen(
       (event) {
-        if (event == 'detected') _onDetected();
+        if (event == 'detected') {
+          _onDetected();
+        } else if (event is Map) {
+          final type = event['type'];
+          if (type == 'command_audio') {
+            final audio = event['audio'] as String;
+            _commandAudioController.add(audio);
+          } else if (type == 'command_empty') {
+            _commandEmptyController.add(null);
+          }
+        }
       },
       onError: (e) => _log.w('WakeWordService: event stream error: $e'),
     );
@@ -97,12 +107,38 @@ class WakeWordService {
 
   void dispose() {
     _detectionController.close();
+    _commandAudioController.close();
+    _commandEmptyController.close();
     unawaited(stop()); // fire-and-forget; native side cleans up when engine detaches
   }
 
   // Detection stream — AmbientScreen listens and triggers VoiceAssistantService
   final _detectionController = StreamController<void>.broadcast();
   Stream<void> get detectionStream => _detectionController.stream;
+
+  final _commandAudioController = StreamController<String>.broadcast();
+  Stream<String> get commandAudioStream => _commandAudioController.stream;
+
+  final _commandEmptyController = StreamController<void>.broadcast();
+  Stream<void> get commandEmptyStream => _commandEmptyController.stream;
+
+  Future<void> startCommandRecording(String vadSensitivity) async {
+    try {
+      await _methodChannel.invokeMethod('start_command_recording', {
+        'vad_sensitivity': vadSensitivity,
+      });
+    } catch (e) {
+      _log.w('WakeWordService: start_command_recording failed: $e');
+    }
+  }
+
+  Future<void> cancelCommandRecording() async {
+    try {
+      await _methodChannel.invokeMethod('cancel_command_recording');
+    } catch (e) {
+      _log.w('WakeWordService: cancel_command_recording failed: $e');
+    }
+  }
 
   void _onDetected() {
     _ref.read(displayStateProvider.notifier).recordWakeWordDetection();
