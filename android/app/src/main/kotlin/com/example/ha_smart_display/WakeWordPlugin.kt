@@ -38,6 +38,8 @@ private const val TAG = "WakeWordPlugin"
  */
 class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
 
+    private enum class Mode { STOPPED, DETECTING, WAITING, RECORDING }
+
     private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
     private lateinit var appContext: Context
@@ -86,6 +88,26 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private var preRollFilled = false
     private var preRollSnapshot: ShortArray? = null
 
+    // Command recording state
+    private val commandChunks = mutableListOf<ShortArray>()
+    private var commandTotalSamples = 0
+
+    // VAD config (set by start_command_recording)
+    private var vadSilenceThresholdMs = 1500
+    private var vadNoiseMultiplier = 1.5
+    private val VAD_MIN_ENERGY = 100.0
+    private val VAD_MAX_DURATION_MS = 10000
+    private val VAD_CALIBRATION_CHUNKS = 20  // ~200ms of noise floor sampling
+
+    // VAD runtime state
+    private var vadCalibrationCount = 0
+    private var vadCalibrationRmsSum = 0.0
+    private var vadCalibrated = false
+    private var vadEnergyThreshold = VAD_MIN_ENERGY
+    private var vadSpeechStarted = false
+    private var vadSilenceMs = 0
+    private var vadTotalMs = 0
+
     private var loggedSampleFeatures = false
 
     // Peak probability tracked since last reset (including during cooldown frames).
@@ -95,8 +117,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private var peakProbability = 0f
     private val PEAK_THRESHOLD = 0.5f
 
-    @Volatile private var running = false
-    @Volatile private var paused = false
+    @Volatile private var mode = Mode.STOPPED
 
     private var eventSink: EventChannel.EventSink? = null
 
@@ -131,40 +152,66 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                 result.success(null)
             }
             "stop"   -> { stopAll();          result.success(null) }
-            "pause"  -> { paused = true;      result.success(null) }
+            "pause"  -> { mode = Mode.WAITING; result.success(null) }
             "resume" -> {
-                // Respond immediately so Dart isn't blocked.
                 result.success(null)
-                // Poll AudioManager.isMusicActive() until speaker output stops before
-                // unpausing detection. This prevents TTS audio still draining through
-                // the AudioTrack buffer from re-triggering the wake word.
-                // Runs on a dedicated HandlerThread so it doesn't block the MethodChannel
-                // handler or the audio loop thread. removeCallbacksAndMessages cancels any
-                // pending resume before posting the new one — only the latest resume runs,
-                // preventing thread accumulation over hours of use.
-                val handler = resumeHandler ?: run { paused = false; return }
+                val handler = resumeHandler ?: run { mode = Mode.DETECTING; return }
                 handler.removeCallbacksAndMessages(null)
                 handler.post {
                     val am = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     val deadline = System.currentTimeMillis() + 8000L
-                    while (System.currentTimeMillis() < deadline && running) {
+                    while (System.currentTimeMillis() < deadline && mode != Mode.STOPPED) {
                         if (!am.isMusicActive) break
                         try { Thread.sleep(100) } catch (_: InterruptedException) { return@post }
                     }
-                    if (!running) return@post
-                    // Extra 500ms for room echo decay after speaker goes quiet.
+                    if (mode == Mode.STOPPED) return@post
                     try { Thread.sleep(500) } catch (_: InterruptedException) { return@post }
-                    if (!running) return@post
-                    // All writes before the volatile paused=false are visible to the
-                    // audio thread when it next reads paused (JMM happens-before).
+                    if (mode == Mode.STOPPED) return@post
                     probabilityWindow.clear()
                     frameBuffer.clear()
                     peakProbability = 0f
                     cooldownFrames = slidingWindowSize * 5
                     microFrontend?.reset()
-                    paused = false
-                    Log.d(TAG, "resume: unpaused after audio went quiet")
+                    preRollWritePos = 0
+                    preRollFilled = false
+                    mode = Mode.DETECTING
+                    Log.d(TAG, "resume: back to DETECTING after audio went quiet")
                 }
+            }
+            "start_command_recording" -> {
+                if (mode != Mode.WAITING && mode != Mode.DETECTING) {
+                    result.error("INVALID_STATE", "Expected WAITING or DETECTING, got $mode", null)
+                    return
+                }
+                if (mode == Mode.DETECTING) {
+                    preRollSnapshot = snapshotPreRoll()
+                }
+                val sensitivity = call.argument<String>("vad_sensitivity") ?: "default"
+                when (sensitivity) {
+                    "relaxed" -> { vadSilenceThresholdMs = 2500; vadNoiseMultiplier = 1.5 }
+                    "aggressive" -> { vadSilenceThresholdMs = 400; vadNoiseMultiplier = 1.5 }
+                    else -> { vadSilenceThresholdMs = 1500; vadNoiseMultiplier = 1.5 }
+                }
+                resetVadState()
+                mode = Mode.RECORDING
+                Log.d(TAG, "start_command_recording: sensitivity=$sensitivity silenceMs=$vadSilenceThresholdMs")
+                result.success(null)
+            }
+            "cancel_command_recording" -> {
+                if (mode == Mode.RECORDING) {
+                    resetVadState()
+                    preRollSnapshot = null
+                    probabilityWindow.clear()
+                    frameBuffer.clear()
+                    peakProbability = 0f
+                    cooldownFrames = slidingWindowSize * 5
+                    microFrontend?.reset()
+                    preRollWritePos = 0
+                    preRollFilled = false
+                    mode = Mode.DETECTING
+                    Log.d(TAG, "cancel_command_recording: back to DETECTING")
+                }
+                result.success(null)
             }
             else -> result.notImplemented()
         }
@@ -268,8 +315,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
         Log.d(TAG, "startAll: AudioRecord initialized OK")
 
-        running = true
-        paused = false
+        mode = Mode.DETECTING
 
         val thread = HandlerThread("WakeWordAudio").also { it.start() }
         audioThread = thread
@@ -283,7 +329,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     }
 
     private fun stopAll() {
-        running = false
+        mode = Mode.STOPPED
         echoCanceller?.release(); echoCanceller = null
         noiseSuppressor?.release(); noiseSuppressor = null
         gainControl?.release(); gainControl = null
@@ -296,6 +342,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         inputBuf = null
         outputBuf = null
         preRollWritePos = 0; preRollFilled = false; preRollSnapshot = null
+        resetVadState()
         frameBuffer.clear(); probabilityWindow.clear()
     }
 
@@ -303,24 +350,33 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
     private fun audioLoop(record: AudioRecord, samplesPerStep: Int) {
         val buffer = ShortArray(samplesPerStep)
-        while (running) {
+        while (mode != Mode.STOPPED) {
             val read = record.read(buffer, 0, samplesPerStep)
-            if (read <= 0 || paused) continue
-            writePreRoll(buffer, read)
+            if (read <= 0) continue
 
-            val fe = microFrontend ?: break
-
-            val frames = fe.processSamples(buffer)
-            frameBuffer.addAll(frames)
-
-            // Non-overlapping blocks (matches ESPHome/HA Android): run inference every FEATURE_STRIDE frames,
-            // then clear all accumulated frames — not a sliding window
-            while (frameBuffer.size >= FEATURE_STRIDE) {
-                val batch = frameBuffer.take(FEATURE_STRIDE)
-                frameBuffer.clear()
-
-                val probability = runInference(batch)
-                processDetection(probability)
+            when (mode) {
+                Mode.DETECTING -> {
+                    writePreRoll(buffer, read)
+                    val fe = microFrontend ?: break
+                    val frames = fe.processSamples(buffer)
+                    frameBuffer.addAll(frames)
+                    while (frameBuffer.size >= FEATURE_STRIDE) {
+                        val batch = frameBuffer.take(FEATURE_STRIDE)
+                        frameBuffer.clear()
+                        val probability = runInference(batch)
+                        processDetection(probability)
+                    }
+                }
+                Mode.WAITING -> {
+                    // Discard audio — waiting for Flutter trigger sound to finish
+                }
+                Mode.RECORDING -> {
+                    val chunk = buffer.copyOfRange(0, read)
+                    commandChunks.add(chunk)
+                    commandTotalSamples += read
+                    processVad(chunk)
+                }
+                Mode.STOPPED -> break
             }
         }
     }
@@ -410,7 +466,8 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                 // Pause immediately on the native side so the audio loop stops processing
                 // before the Dart pause() round-trip arrives. Without this, TTS audio
                 // from the speaker can trigger a second detection during the round-trip.
-                paused = true
+                mode = Mode.WAITING
+                preRollSnapshot = snapshotPreRoll()
                 peakProbability = 0f
                 probabilityWindow.clear()
                 // Reset microfrontend so residual wake-word audio in PCAN/noise-reduction
@@ -424,7 +481,123 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         }
     }
 
-    // ── Asset loading ─────────────────────────────────────────────────────────
+    // ── VAD helpers ─────────────────────────────────────────────────────────
+
+    private fun resetVadState() {
+        commandChunks.clear()
+        commandTotalSamples = 0
+        vadCalibrationCount = 0
+        vadCalibrationRmsSum = 0.0
+        vadCalibrated = false
+        vadEnergyThreshold = VAD_MIN_ENERGY
+        vadSpeechStarted = false
+        vadSilenceMs = 0
+        vadTotalMs = 0
+    }
+
+    private fun computeRms(samples: ShortArray): Double {
+        if (samples.isEmpty()) return 0.0
+        var sum = 0.0
+        for (s in samples) {
+            val d = s.toDouble()
+            sum += d * d
+        }
+        return kotlin.math.sqrt(sum / samples.size)
+    }
+
+    private fun processVad(chunk: ShortArray) {
+        val chunkMs = chunk.size * 1000 / SAMPLE_RATE
+        vadTotalMs += chunkMs
+
+        val rms = computeRms(chunk)
+
+        if (!vadCalibrated) {
+            vadCalibrationRmsSum += rms
+            vadCalibrationCount++
+            if (vadCalibrationCount >= VAD_CALIBRATION_CHUNKS) {
+                val noiseFloor = vadCalibrationRmsSum / vadCalibrationCount
+                vadEnergyThreshold = maxOf(noiseFloor * vadNoiseMultiplier, VAD_MIN_ENERGY)
+                vadCalibrated = true
+                Log.d(TAG, "VAD: calibrated noiseFloor=${"%.1f".format(noiseFloor)} threshold=${"%.1f".format(vadEnergyThreshold)}")
+            }
+            return
+        }
+
+        if (rms > vadEnergyThreshold) {
+            vadSpeechStarted = true
+            vadSilenceMs = 0
+        } else if (vadSpeechStarted) {
+            vadSilenceMs += chunkMs
+        }
+
+        if ((vadSpeechStarted && vadSilenceMs >= vadSilenceThresholdMs) ||
+            vadTotalMs >= VAD_MAX_DURATION_MS) {
+            finishCommandRecording()
+        }
+    }
+
+    // ── WAV builder + command recording finish ───────────────────────────────
+
+    private fun buildWav(samples: ShortArray, sampleRate: Int): ByteArray {
+        val dataSize = samples.size * 2
+        val buf = java.nio.ByteBuffer.allocate(44 + dataSize)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        // RIFF header
+        buf.put("RIFF".toByteArray(Charsets.US_ASCII))
+        buf.putInt(36 + dataSize)
+        buf.put("WAVE".toByteArray(Charsets.US_ASCII))
+        // fmt sub-chunk
+        buf.put("fmt ".toByteArray(Charsets.US_ASCII))
+        buf.putInt(16)        // sub-chunk size
+        buf.putShort(1)       // PCM format
+        buf.putShort(1)       // mono
+        buf.putInt(sampleRate)
+        buf.putInt(sampleRate * 2) // byte rate
+        buf.putShort(2)       // block align
+        buf.putShort(16)      // bits per sample
+        // data sub-chunk
+        buf.put("data".toByteArray(Charsets.US_ASCII))
+        buf.putInt(dataSize)
+        for (s in samples) buf.putShort(s)
+        return buf.array()
+    }
+
+    private fun finishCommandRecording() {
+        // Switch to WAITING — Flutter will call "resume" after TTS playback
+        mode = Mode.WAITING
+
+        val preRoll = preRollSnapshot ?: ShortArray(0)
+        val totalSamples = preRoll.size + commandTotalSamples
+        val allSamples = ShortArray(totalSamples)
+        System.arraycopy(preRoll, 0, allSamples, 0, preRoll.size)
+        var offset = preRoll.size
+        for (chunk in commandChunks) {
+            System.arraycopy(chunk, 0, allSamples, offset, chunk.size)
+            offset += chunk.size
+        }
+
+        val speechDetected = vadSpeechStarted
+        resetVadState()
+        preRollSnapshot = null
+
+        if (totalSamples == 0 || !speechDetected) {
+            Log.d(TAG, "finishCommandRecording: no speech detected")
+            mainHandler.post { eventSink?.success(mapOf("type" to "command_empty")) }
+        } else {
+            val wav = buildWav(allSamples, SAMPLE_RATE)
+            val b64 = android.util.Base64.encodeToString(wav, android.util.Base64.NO_WRAP)
+            Log.d(TAG, "finishCommandRecording: sent ${wav.size} bytes (${totalSamples * 1000 / SAMPLE_RATE}ms, preRoll=${preRoll.size * 1000 / SAMPLE_RATE}ms)")
+            mainHandler.post {
+                eventSink?.success(mapOf(
+                    "type" to "command_audio",
+                    "audio" to b64,
+                    "sample_rate" to SAMPLE_RATE
+                ))
+            }
+        }
+    }
+
+    // ── Pre-roll ring buffer ─────────────────────────────────────────────────
 
     private fun writePreRoll(buffer: ShortArray, count: Int) {
         for (i in 0 until count) {
