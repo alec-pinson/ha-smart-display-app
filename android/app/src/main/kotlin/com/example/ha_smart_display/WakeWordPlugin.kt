@@ -6,6 +6,8 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -55,6 +57,8 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     // Runtime state
     private var audioRecord: AudioRecord? = null
     private var echoCanceller: AcousticEchoCanceler? = null
+    private var noiseSuppressor: NoiseSuppressor? = null
+    private var gainControl: AutomaticGainControl? = null
     private var audioThread: HandlerThread? = null
     private var audioHandler: Handler? = null
     private var resumeThread: HandlerThread? = null
@@ -234,6 +238,26 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
             null
         }
 
+        noiseSuppressor = if (NoiseSuppressor.isAvailable()) {
+            NoiseSuppressor.create(record.audioSessionId)?.also { ns ->
+                ns.enabled = true
+                Log.d(TAG, "startAll: NoiseSuppressor attached (enabled=${ns.enabled})")
+            }
+        } else {
+            Log.d(TAG, "startAll: NoiseSuppressor not available on this device")
+            null
+        }
+
+        gainControl = if (AutomaticGainControl.isAvailable()) {
+            AutomaticGainControl.create(record.audioSessionId)?.also { agc ->
+                agc.enabled = true
+                Log.d(TAG, "startAll: AutomaticGainControl attached (enabled=${agc.enabled})")
+            }
+        } else {
+            Log.d(TAG, "startAll: AutomaticGainControl not available on this device")
+            null
+        }
+
         Log.d(TAG, "startAll: AudioRecord initialized OK")
 
         running = true
@@ -253,6 +277,8 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private fun stopAll() {
         running = false
         echoCanceller?.release(); echoCanceller = null
+        noiseSuppressor?.release(); noiseSuppressor = null
+        gainControl?.release(); gainControl = null
         audioRecord?.let { try { it.stop() } catch (_: Exception) {}; it.release() }
         audioRecord = null
         audioThread?.quitSafely(); audioThread = null; audioHandler = null
