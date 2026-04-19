@@ -37,6 +37,13 @@ class TimerService {
     if (_firingController.isClosed) return;
     final state = _ref.read(displayStateProvider);
 
+    // Prune fired-once sets so reused ids (e.g. HA's "voice_timer") can
+    // fire again after a previous instance is dismissed.
+    _firedTimers.removeWhere((id) => !state.timers.any((t) => t.id == id));
+    final today = DateTime.now().day;
+    _firedAlarms.removeWhere((key) =>
+        !state.alarms.any((a) => '${a.id}_$today' == key));
+
     for (final timer in state.timers) {
       if (timer.isExpired && !_firedTimers.contains(timer.id)) {
         _firedTimers.add(timer.id);
