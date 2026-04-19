@@ -81,13 +81,6 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
     private var outputScale = 0.00390625f
     private var cooldownFrames = 0
 
-    // Pre-roll ring buffer — stores last 500ms of raw PCM for command recording
-    private val PRE_ROLL_SAMPLES = SAMPLE_RATE / 2  // 8000 samples = 500ms at 16kHz
-    private var preRollBuffer = ShortArray(PRE_ROLL_SAMPLES)
-    private var preRollWritePos = 0
-    private var preRollFilled = false
-    private var preRollSnapshot: ShortArray? = null
-
     // Command recording state
     private val commandChunks = mutableListOf<ShortArray>()
     private var commandTotalSamples = 0
@@ -172,8 +165,6 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                     peakProbability = 0f
                     cooldownFrames = slidingWindowSize * 5
                     microFrontend?.reset()
-                    preRollWritePos = 0
-                    preRollFilled = false
                     mode = Mode.DETECTING
                     Log.d(TAG, "resume: back to DETECTING after audio went quiet")
                 }
@@ -182,9 +173,6 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                 if (mode != Mode.WAITING && mode != Mode.DETECTING) {
                     result.error("INVALID_STATE", "Expected WAITING or DETECTING, got $mode", null)
                     return
-                }
-                if (mode == Mode.DETECTING) {
-                    preRollSnapshot = snapshotPreRoll()
                 }
                 val sensitivity = call.argument<String>("vad_sensitivity") ?: "default"
                 when (sensitivity) {
@@ -200,14 +188,11 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
             "cancel_command_recording" -> {
                 if (mode == Mode.RECORDING) {
                     resetVadState()
-                    preRollSnapshot = null
                     probabilityWindow.clear()
                     frameBuffer.clear()
                     peakProbability = 0f
                     cooldownFrames = slidingWindowSize * 5
                     microFrontend?.reset()
-                    preRollWritePos = 0
-                    preRollFilled = false
                     mode = Mode.DETECTING
                     Log.d(TAG, "cancel_command_recording: back to DETECTING")
                 }
@@ -341,7 +326,6 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         interpreter?.close(); interpreter = null
         inputBuf = null
         outputBuf = null
-        preRollWritePos = 0; preRollFilled = false; preRollSnapshot = null
         resetVadState()
         frameBuffer.clear(); probabilityWindow.clear()
     }
@@ -356,7 +340,6 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
             when (mode) {
                 Mode.DETECTING -> {
-                    writePreRoll(buffer, read)
                     val fe = microFrontend ?: break
                     val frames = fe.processSamples(buffer)
                     frameBuffer.addAll(frames)
@@ -467,7 +450,6 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                 // before the Dart pause() round-trip arrives. Without this, TTS audio
                 // from the speaker can trigger a second detection during the round-trip.
                 mode = Mode.WAITING
-                preRollSnapshot = snapshotPreRoll()
                 peakProbability = 0f
                 probabilityWindow.clear()
                 // Reset microfrontend so residual wake-word audio in PCAN/noise-reduction
@@ -566,11 +548,9 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         // Switch to WAITING — Flutter will call "resume" after TTS playback
         mode = Mode.WAITING
 
-        val preRoll = preRollSnapshot ?: ShortArray(0)
-        val totalSamples = preRoll.size + commandTotalSamples
+        val totalSamples = commandTotalSamples
         val allSamples = ShortArray(totalSamples)
-        System.arraycopy(preRoll, 0, allSamples, 0, preRoll.size)
-        var offset = preRoll.size
+        var offset = 0
         for (chunk in commandChunks) {
             System.arraycopy(chunk, 0, allSamples, offset, chunk.size)
             offset += chunk.size
@@ -578,7 +558,6 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
 
         val speechDetected = vadSpeechStarted
         resetVadState()
-        preRollSnapshot = null
 
         if (totalSamples == 0 || !speechDetected) {
             Log.d(TAG, "finishCommandRecording: no speech detected")
@@ -586,7 +565,7 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
         } else {
             val wav = buildWav(allSamples, SAMPLE_RATE)
             val b64 = android.util.Base64.encodeToString(wav, android.util.Base64.NO_WRAP)
-            Log.d(TAG, "finishCommandRecording: sent ${wav.size} bytes (${totalSamples * 1000 / SAMPLE_RATE}ms, preRoll=${preRoll.size * 1000 / SAMPLE_RATE}ms)")
+            Log.d(TAG, "finishCommandRecording: sent ${wav.size} bytes (${totalSamples * 1000 / SAMPLE_RATE}ms)")
             mainHandler.post {
                 eventSink?.success(mapOf(
                     "type" to "command_audio",
@@ -595,29 +574,6 @@ class WakeWordPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, EventChan
                 ))
             }
         }
-    }
-
-    // ── Pre-roll ring buffer ─────────────────────────────────────────────────
-
-    private fun writePreRoll(buffer: ShortArray, count: Int) {
-        for (i in 0 until count) {
-            preRollBuffer[preRollWritePos] = buffer[i]
-            preRollWritePos = (preRollWritePos + 1) % PRE_ROLL_SAMPLES
-            if (preRollWritePos == 0) preRollFilled = true
-        }
-    }
-
-    private fun snapshotPreRoll(): ShortArray {
-        val size = if (preRollFilled) PRE_ROLL_SAMPLES else preRollWritePos
-        val snapshot = ShortArray(size)
-        if (preRollFilled) {
-            val tail = PRE_ROLL_SAMPLES - preRollWritePos
-            System.arraycopy(preRollBuffer, preRollWritePos, snapshot, 0, tail)
-            System.arraycopy(preRollBuffer, 0, snapshot, tail, preRollWritePos)
-        } else {
-            System.arraycopy(preRollBuffer, 0, snapshot, 0, preRollWritePos)
-        }
-        return snapshot
     }
 
     private fun loadModelFromAssets(wakeWord: String): ByteBuffer? {
