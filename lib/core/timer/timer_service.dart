@@ -26,6 +26,10 @@ class TimerService {
 
   Timer? _checkTimer;
 
+  // Players that were active when a wake-word detection paused alerts.
+  // Populated by pauseActiveAlerts(), drained by resumeActiveAlerts().
+  final _pausedForVoice = <AudioPlayer>{};
+
   final _firingController = StreamController<FiringAlert?>.broadcast();
   Stream<FiringAlert?> get firingStream => _firingController.stream;
 
@@ -185,6 +189,48 @@ class TimerService {
       _log.w('TimerService: could not play notification sound: $e');
       mediaSvc.resumeAfterDucking();
     }
+  }
+
+  /// Pauses any alert players currently looping so VAD can detect end-of-speech
+  /// during a wake-word command recording. Called on wake-word detection.
+  /// Safe to call repeatedly; no-op if nothing is playing.
+  Future<void> pauseActiveAlerts() async {
+    for (final player in [_chimePlayer, _haAlarmPlayer, _sirenPlayer]) {
+      if (player == null) continue;
+      if (_pausedForVoice.contains(player)) continue;
+      if (!player.playing) continue;
+      try {
+        await player.pause();
+        _pausedForVoice.add(player);
+      } catch (e) {
+        _log.w('TimerService: pause failed on alert player: $e');
+      }
+    }
+    if (_pausedForVoice.isNotEmpty) {
+      _log.d('TimerService: paused ${_pausedForVoice.length} alert player(s) for voice');
+    }
+  }
+
+  /// Resumes alert players that were paused by pauseActiveAlerts(). Silently
+  /// skips players that have since been disposed (e.g. dismissed during the
+  /// voice interaction). Called on VoiceAssistantState.idle.
+  Future<void> resumeActiveAlerts() async {
+    if (_pausedForVoice.isEmpty) return;
+    // Snapshot current live players so we can tell if something was disposed.
+    final live = <AudioPlayer>{};
+    if (_chimePlayer != null) live.add(_chimePlayer!);
+    if (_haAlarmPlayer != null) live.add(_haAlarmPlayer!);
+    if (_sirenPlayer != null) live.add(_sirenPlayer!);
+
+    for (final player in _pausedForVoice) {
+      if (!live.contains(player)) continue; // disposed while paused
+      try {
+        await player.play();
+      } catch (e) {
+        _log.w('TimerService: resume failed on alert player: $e');
+      }
+    }
+    _pausedForVoice.clear();
   }
 
   void dispose() {
