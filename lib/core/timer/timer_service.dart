@@ -7,6 +7,7 @@ import 'package:logger/logger.dart';
 
 import '../display_state/display_state_notifier.dart';
 import '../media/media_player_service.dart';
+import '../voice/voice_assistant_service.dart';
 import '../wake_word/wake_word_service.dart';
 
 const _systemChannel = MethodChannel('ha_smart_display/system');
@@ -27,6 +28,7 @@ class TimerService {
 
   Timer? _checkTimer;
   StreamSubscription<void>? _wakeWordSub;
+  StreamSubscription<VoiceAssistantState>? _voiceStateSub;
 
   // Players that were active when a wake-word detection paused alerts.
   // Populated by pauseActiveAlerts(), drained by resumeActiveAlerts().
@@ -41,6 +43,13 @@ class TimerService {
     final wakeWordSvc = _ref.read(wakeWordServiceProvider);
     _wakeWordSub = wakeWordSvc.detectionStream.listen((_) {
       pauseActiveAlerts();
+    });
+
+    final voiceSvc = _ref.read(voiceAssistantServiceProvider);
+    _voiceStateSub = voiceSvc.stateStream.listen((state) {
+      if (state == VoiceAssistantState.idle) {
+        resumeActiveAlerts();
+      }
     });
   }
 
@@ -243,6 +252,7 @@ class TimerService {
   void dispose() {
     _checkTimer?.cancel();
     _wakeWordSub?.cancel();
+    _voiceStateSub?.cancel();
     _firingController.close();
     _chimePlayer?.dispose();
     _haAlarmPlayer?.dispose();
