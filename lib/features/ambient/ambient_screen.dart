@@ -731,16 +731,30 @@ class _NormalOverlay extends ConsumerWidget {
           cameras: state.cameras,
           onCameraTap: (camera) {
             final notifier = ref.read(displayStateProvider.notifier);
-            notifier.setFocusedCamera(camera.id);
+            final streamType = notifier.tapStreamType;
+            final openCamera = camera.copyWith(
+              streamType: streamType,
+              frigateUrl: notifier.tapFrigateUrl,
+              go2rtcUrl: notifier.tapGo2rtcUrl,
+            );
+            // For snapshot cameras, tell HA to start the 1fps JPEG loop.
+            // For video cameras, the app streams directly — no JPEG loop needed.
+            if (streamType == CameraStreamType.snapshot) {
+              notifier.setFocusedCamera(camera.id);
+            }
             showDialog(
               context: context,
               barrierColor: Colors.black,
               useSafeArea: false,
               builder: (_) => _CameraFullScreen(
-                initialCamera: camera,
+                initialCamera: openCamera,
                 notifier: notifier,
               ),
-            ).then((_) => notifier.setFocusedCamera(null));
+            ).then((_) {
+              if (streamType == CameraStreamType.snapshot) {
+                notifier.setFocusedCamera(null);
+              }
+            });
           },
         );
       case 'music':

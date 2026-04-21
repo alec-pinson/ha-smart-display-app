@@ -96,6 +96,14 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
   final DateTime _startTime = DateTime.now();
 
   String? _focusedCamera;
+  CameraStreamType _tapStreamType = CameraStreamType.snapshot;
+  String? _tapFrigateUrl;
+  String? _tapGo2rtcUrl;
+
+  CameraStreamType get tapStreamType => _tapStreamType;
+  String? get tapFrigateUrl => _tapFrigateUrl;
+  String? get tapGo2rtcUrl => _tapGo2rtcUrl;
+
   StreamSubscription? _mediaStatusSub;
   Timer? _mediaIdleTimer;
   Timer? _musicInactiveTimer;
@@ -567,6 +575,18 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
         ));
       }
       unawaited(_ref.read(voiceAssistantServiceProvider).onResponseReceived(ttsUrl: ttsUrl));
+    }
+
+    if (payload.containsKey('camera_stream_config')) {
+      final cfg = payload['camera_stream_config'] as Map<String, dynamic>;
+      final streamTypeStr = cfg['stream_type'] as String? ?? 'snapshot';
+      _tapStreamType = switch (streamTypeStr) {
+        'video' => CameraStreamType.video,
+        'video_audio' => CameraStreamType.videoAudio,
+        _ => CameraStreamType.snapshot,
+      };
+      _tapFrigateUrl = cfg['frigate_url'] as String?;
+      _tapGo2rtcUrl = cfg['go2rtc_url'] as String?;
     }
 
     state = newState;
