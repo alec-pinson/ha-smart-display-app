@@ -19,8 +19,8 @@ class OtaUpdateService {
   OtaUpdateService(this._ref);
 
   void handleUpdate(String url) {
-    _doUpdate(url).catchError((Object e) {
-      _log.e('OtaUpdateService: update failed: $e');
+    _doUpdate(url).catchError((Object e, StackTrace st) {
+      _log.e('OtaUpdateService: update failed', error: e, stackTrace: st);
       _sendError('Update failed: $e');
     });
   }
@@ -37,16 +37,19 @@ class OtaUpdateService {
     final tmpDir = await getTemporaryDirectory();
     final apkFile = File('${tmpDir.path}/ota_update.apk');
     final client = http.Client();
+    IOSink? sink;
     try {
       final request = http.Request('GET', Uri.parse(url));
       final response = await client.send(request);
       if (response.statusCode != 200) {
         throw Exception('Download failed: HTTP ${response.statusCode}');
       }
-      final sink = apkFile.openWrite();
+      sink = apkFile.openWrite();
       await response.stream.pipe(sink);
       await sink.close();
+      sink = null;
     } finally {
+      await sink?.close();
       client.close();
     }
     return apkFile.path;
