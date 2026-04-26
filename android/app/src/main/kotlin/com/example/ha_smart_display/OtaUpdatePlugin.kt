@@ -77,20 +77,40 @@ class OtaUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
             val receiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context, i: Intent) {
-                    ctx.unregisterReceiver(this)
                     val status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-                    if (status == PackageInstaller.STATUS_SUCCESS) {
-                        result.success(null)
-                    } else {
-                        val msg = i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Unknown error"
-                        result.error("INSTALL_FAILED", msg, null)
+                    when (status) {
+                        PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                            // System requires user confirmation — launch the install UI.
+                            // Stay registered; the next broadcast delivers success/failure.
+                            val confirmIntent = if (android.os.Build.VERSION.SDK_INT >= 33)
+                                i.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                            else
+                                @Suppress("DEPRECATION") i.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                            confirmIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            if (confirmIntent != null) ctx.startActivity(confirmIntent)
+                        }
+                        PackageInstaller.STATUS_SUCCESS -> {
+                            ctx.unregisterReceiver(this)
+                            result.success(null)
+                        }
+                        else -> {
+                            ctx.unregisterReceiver(this)
+                            val msg = i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Unknown error"
+                            result.error("INSTALL_FAILED", msg, null)
+                        }
                     }
                 }
             }
 
-            // RECEIVER_NOT_EXPORTED = 4 (API 33+); safe to pass 0 on older APIs
-            val flags = if (android.os.Build.VERSION.SDK_INT >= 33) 4 else 0
-            context.registerReceiver(receiver, IntentFilter(ACTION_INSTALL_COMPLETE), null, null, flags)
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                context.registerReceiver(
+                    receiver,
+                    IntentFilter(ACTION_INSTALL_COMPLETE),
+                    Context.RECEIVER_NOT_EXPORTED
+                )
+            } else {
+                context.registerReceiver(receiver, IntentFilter(ACTION_INSTALL_COMPLETE))
+            }
 
             session.commit(pendingIntent.intentSender)
         } catch (e: Exception) {
