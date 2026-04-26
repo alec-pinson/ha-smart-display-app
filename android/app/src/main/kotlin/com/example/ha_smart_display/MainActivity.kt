@@ -24,6 +24,9 @@ class MainActivity : FlutterActivity() {
         // Register camera analysis plugin (lux + motion detection)
         flutterEngine.plugins.add(CameraAnalysisPlugin())
 
+        // Register OTA update plugin
+        flutterEngine.plugins.add(OtaUpdatePlugin())
+
         // System channel — brightness + volume control
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SYSTEM_CHANNEL_NAME)
