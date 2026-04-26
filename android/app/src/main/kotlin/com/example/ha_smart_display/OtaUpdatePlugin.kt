@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import android.app.PendingIntent
+import android.net.Uri
+import android.provider.Settings
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -45,6 +47,22 @@ class OtaUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun installApk(filePath: String, result: MethodChannel.Result) {
+        if (android.os.Build.VERSION.SDK_INT >= 26 &&
+            !context.packageManager.canRequestPackageInstalls()
+        ) {
+            val settingsIntent = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:${context.packageName}")
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(settingsIntent)
+            result.error(
+                "PERMISSION_REQUIRED",
+                "Grant 'Install unknown apps' permission on the device and retry",
+                null
+            )
+            return
+        }
+
         val file = File(filePath)
         if (!file.exists()) {
             result.error("FILE_NOT_FOUND", "APK not found at $filePath", null)
