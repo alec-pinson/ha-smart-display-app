@@ -12,6 +12,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../device/device_id_service.dart';
 import '../display_state/display_state.dart';
 import '../display_state/display_state_notifier.dart';
+import '../ota/ota_update_service.dart';
 import '../pairing/pairing_service.dart';
 
 final _log = Logger();
@@ -133,6 +134,15 @@ class DisplayServer {
   void _handleCommand(Map<String, dynamic> payload) {
     _log.d('DisplayServer: received command');
     _lastStateReceived = DateTime.now();
+    if (payload['action'] == 'ota_update') {
+      final url = payload['url'] as String?;
+      if (url != null) {
+        _ref.read(otaUpdateServiceProvider).handleUpdate(url);
+      } else {
+        _log.w('DisplayServer: ota_update command missing url');
+      }
+      return;
+    }
     _ref.read(displayStateProvider.notifier).applyCommand(payload);
   }
 
