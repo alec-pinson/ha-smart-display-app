@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../device/app_version.dart';
+
 enum MediaPlayerState { idle, buffering, playing, paused }
 
 class ImmichConfig {
@@ -486,6 +488,7 @@ class DisplayState {
   }
 
   Map<String, dynamic> toJson() => {
+        'app_version': appVersion,
         'wake_word': wakeWord,
         'wake_word_sensitivity': wakeWordSensitivity,
         'vad_sensitivity': vadSensitivity,

@@ -46,6 +46,11 @@ dependencies:
   # Runtime permission requests
   permission_handler: ^11.3.1
 
+  # OTA update support
+  package_info_plus: ^8.1.1
+  http: ^1.2.1
+  path_provider: ^2.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

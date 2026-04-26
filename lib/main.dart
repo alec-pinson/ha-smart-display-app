@@ -3,15 +3,20 @@ import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'app.dart';
+import 'core/device/app_version.dart';
 import 'core/pairing/pairing_service.dart';
 import 'core/server/display_server.dart';
 import 'core/display_state/display_state_notifier.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final packageInfo = await PackageInfo.fromPlatform();
+  appVersion = packageInfo.version;
 
   // Clear just_audio's on-disk asset cache so updated audio files in a
   // reinstalled APK are always picked up (cache persists across adb install -r).
