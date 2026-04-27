@@ -1,26 +1,17 @@
 package com.example.ha_smart_display
 
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
-import android.content.pm.PackageInstaller
-import android.app.PendingIntent
 import android.net.Uri
 import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
-import java.io.FileInputStream
 
 class OtaUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
-    private lateinit var context: Context
-
-    companion object {
-        private const val ACTION_INSTALL_COMPLETE = "com.example.ha_smart_display.INSTALL_COMPLETE"
-    }
+    private lateinit var context: android.content.Context
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
@@ -55,11 +46,7 @@ class OtaUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 Uri.parse("package:${context.packageName}")
             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(settingsIntent)
-            result.error(
-                "PERMISSION_REQUIRED",
-                "Grant 'Install unknown apps' permission on the device and retry",
-                null
-            )
+            result.error("PERMISSION_REQUIRED", "Grant 'Install unknown apps' permission and retry", null)
             return
         }
 
@@ -69,71 +56,20 @@ class OtaUpdatePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             return
         }
 
-        val packageInstaller = context.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-        val sessionId: Int
-        val session: PackageInstaller.Session
-        try {
-            sessionId = packageInstaller.createSession(params)
-            session = packageInstaller.openSession(sessionId)
-        } catch (e: Exception) {
-            result.error("SESSION_ERROR", e.message, null)
-            return
+        val apkUri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.provider",
+            file
+        )
+
+        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            data = apkUri
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
         }
 
-        try {
-            session.openWrite("package", 0, file.length()).use { output ->
-                FileInputStream(file).use { input -> input.copyTo(output) }
-                session.fsync(output)
-            }
-
-            val intent = Intent(ACTION_INSTALL_COMPLETE)
-            val pendingIntent = PendingIntent.getBroadcast(
-                context, sessionId, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            val receiver = object : BroadcastReceiver() {
-                override fun onReceive(ctx: Context, i: Intent) {
-                    val status = i.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-                    when (status) {
-                        PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                            // System requires user confirmation — launch the install UI.
-                            // Stay registered; the next broadcast delivers success/failure.
-                            val confirmIntent = if (android.os.Build.VERSION.SDK_INT >= 33)
-                                i.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                            else
-                                @Suppress("DEPRECATION") i.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-                            confirmIntent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            if (confirmIntent != null) ctx.startActivity(confirmIntent)
-                        }
-                        PackageInstaller.STATUS_SUCCESS -> {
-                            ctx.unregisterReceiver(this)
-                            result.success(null)
-                        }
-                        else -> {
-                            ctx.unregisterReceiver(this)
-                            val msg = i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "Unknown error"
-                            result.error("INSTALL_FAILED", msg, null)
-                        }
-                    }
-                }
-            }
-
-            if (android.os.Build.VERSION.SDK_INT >= 33) {
-                context.registerReceiver(
-                    receiver,
-                    IntentFilter(ACTION_INSTALL_COMPLETE),
-                    Context.RECEIVER_NOT_EXPORTED
-                )
-            } else {
-                context.registerReceiver(receiver, IntentFilter(ACTION_INSTALL_COMPLETE))
-            }
-
-            session.commit(pendingIntent.intentSender)
-        } catch (e: Exception) {
-            session.abandon()
-            result.error("INSTALL_ERROR", e.message, null)
-        }
+        context.startActivity(intent)
+        // Resolve immediately — system dialog appears on screen, app restarts after confirm.
+        result.success(null)
     }
 }

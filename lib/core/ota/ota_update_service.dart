@@ -7,6 +7,10 @@ import 'package:path_provider/path_provider.dart';
 
 import '../server/display_server.dart';
 
+enum OtaPhase { idle, downloading, installing }
+
+final otaPhaseProvider = StateProvider<OtaPhase>((ref) => OtaPhase.idle);
+
 final otaUpdateServiceProvider = Provider<OtaUpdateService>(
   (ref) => OtaUpdateService(ref),
 );
@@ -20,14 +24,17 @@ class OtaUpdateService {
 
   void handleUpdate(String url) {
     _doUpdate(url).catchError((Object e, StackTrace st) {
+      _ref.read(otaPhaseProvider.notifier).state = OtaPhase.idle;
       _log.e('OtaUpdateService: update failed', error: e, stackTrace: st);
       _sendError('Update failed: $e');
     });
   }
 
   Future<void> _doUpdate(String url) async {
+    _ref.read(otaPhaseProvider.notifier).state = OtaPhase.downloading;
     _log.i('OtaUpdateService: downloading APK from $url');
     final apkPath = await _downloadApk(url);
+    _ref.read(otaPhaseProvider.notifier).state = OtaPhase.installing;
     _log.i('OtaUpdateService: installing APK at $apkPath');
     await _installApk(apkPath);
     _log.i('OtaUpdateService: install triggered successfully');
