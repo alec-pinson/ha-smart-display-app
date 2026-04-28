@@ -35,7 +35,15 @@ class DisplayServer {
 
   Future<void> start() async {
     final handler = webSocketHandler(_onConnection);
-    _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, _port);
+    for (var attempt = 0; attempt < 10; attempt++) {
+      try {
+        _server = await shelf_io.serve(handler, InternetAddress.anyIPv4, _port);
+        break;
+      } on SocketException {
+        if (attempt == 9) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
     _log.i('DisplayServer: listening on port $_port');
 
     final deviceId = await _ref.read(deviceIdProvider.future);

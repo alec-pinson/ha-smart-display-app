@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -63,12 +66,10 @@ class MainActivity : FlutterActivity() {
                         result.success(pct)
                     }
                     "restart" -> {
-                        val intent = Intent(this, MainActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                        }
-                        startActivity(intent)
-                        finish()
                         result.success(null)
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            Process.killProcess(Process.myPid())
+                        }, 100)
                     }
                     else -> result.notImplemented()
                 }
