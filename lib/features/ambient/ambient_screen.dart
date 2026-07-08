@@ -16,6 +16,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/device/device_id_service.dart';
 import '../../core/display_state/display_state.dart';
 import '../../core/display_state/display_state_notifier.dart';
+import '../../core/pairing/instance_profile.dart';
+import '../../core/pairing/pairing_service.dart';
 import '../../core/server/display_server.dart';
 import '../../core/timer/timer_service.dart';
 import '../../core/voice/voice_assistant_service.dart';
@@ -3672,6 +3674,7 @@ class _StatusDialog extends ConsumerStatefulWidget {
 class _StatusDialogState extends ConsumerState<_StatusDialog> {
   String? _ipAddress;
   String? _deviceId;
+  bool _addInstanceMode = false;
 
   @override
   void initState() {
@@ -3820,6 +3823,11 @@ class _StatusDialogState extends ConsumerState<_StatusDialog> {
                 label: 'Wake words detected',
                 value: '${state.wakeWordCount}',
               ),
+              const SizedBox(height: 16),
+              _InstancesSection(
+                addMode: _addInstanceMode,
+                onToggleAdd: () => setState(() => _addInstanceMode = !_addInstanceMode),
+              ),
             ],
           ),
         ),
@@ -3880,6 +3888,179 @@ class _StatusRow extends StatelessWidget {
               color: Colors.white,
               fontSize: 13,
               fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InstancesSection extends ConsumerWidget {
+  final bool addMode;
+  final VoidCallback onToggleAdd;
+  const _InstancesSection({required this.addMode, required this.onToggleAdd});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pairing = ref.watch(pairingProvider);
+    final server = ref.read(displayServerProvider);
+    final connected = server.connectedInstances;
+    final profiles = pairing.store.profiles;
+    final activeId = pairing.store.activeInstanceId;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const _SectionLabel('Instances'),
+            const Spacer(),
+            GestureDetector(
+              onTap: () {
+                if (!addMode) ref.read(pairingProvider.notifier).refreshCode();
+                onToggleAdd();
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(addMode ? Icons.close : Icons.add,
+                        color: const Color(0xFF58A6FF), size: 16),
+                    const SizedBox(width: 4),
+                    Text(addMode ? 'Cancel' : 'Add instance',
+                        style: const TextStyle(color: Color(0xFF58A6FF), fontSize: 13)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (profiles.isEmpty && !addMode)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: Text('No instances paired',
+                style: TextStyle(color: Color(0xFF8B949E), fontSize: 13)),
+          ),
+        for (final p in profiles)
+          _InstanceRow(
+            profile: p,
+            isActive: p.instanceId == activeId,
+            isConnected: connected.contains(p.instanceId),
+            onSelect: () =>
+                ref.read(displayServerProvider).setActiveInstance(p.instanceId),
+            onRemove: () =>
+                ref.read(displayServerProvider).forgetInstance(p.instanceId),
+          ),
+        if (addMode) _AddInstanceCode(code: pairing.pairingCode),
+      ],
+    );
+  }
+}
+
+class _InstanceRow extends StatelessWidget {
+  final InstanceProfile profile;
+  final bool isActive;
+  final bool isConnected;
+  final VoidCallback onSelect;
+  final VoidCallback onRemove;
+
+  const _InstanceRow({
+    required this.profile,
+    required this.isActive,
+    required this.isConnected,
+    required this.onSelect,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Dot: green = active & connected, blue = connected (parked), grey = offline.
+    final Color dot = isActive && isConnected
+        ? const Color(0xFF3FB950)
+        : isConnected
+            ? const Color(0xFF58A6FF)
+            : const Color(0xFF484F58);
+
+    return GestureDetector(
+      onTap: isActive ? null : onSelect,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Icon(Icons.circle, color: dot, size: 12),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(profile.label,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                      )),
+                  if (profile.host != null)
+                    Text(profile.host!,
+                        style: const TextStyle(color: Color(0xFF8B949E), fontSize: 12)),
+                ],
+              ),
+            ),
+            if (isActive)
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Text('Active',
+                    style: TextStyle(color: Color(0xFF3FB950), fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+            GestureDetector(
+              onTap: onRemove,
+              behavior: HitTestBehavior.opaque,
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.delete_outline, color: Color(0xFF8B949E), size: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddInstanceCode extends StatelessWidget {
+  final String code;
+  const _AddInstanceCode({required this.code});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1117),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF30363D)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'In the other Home Assistant, add the HA Smart Display\nintegration and enter this code:',
+            style: TextStyle(color: Color(0xFF8B949E), fontSize: 13, height: 1.5),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              '${code.substring(0, 3)} ${code.substring(3)}',
+              style: const TextStyle(
+                color: Color(0xFF58A6FF),
+                fontSize: 40,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 8,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
             ),
           ),
         ],
