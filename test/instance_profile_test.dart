@@ -108,6 +108,18 @@ void main() {
       expect(store.activeInstanceId, 'prod');
     });
 
+    test('activeProfile returns the active profile, or null when none', () {
+      const empty = ProfileStore.empty();
+      expect(empty.activeProfile, isNull);
+      final store = const ProfileStore.empty()
+          .upsert(prof('prod', 'Home'))
+          .upsert(prof('test', 'Home-Test'))
+          .withActive('test');
+      expect(store.activeProfile?.instanceId, 'test');
+      expect(store.activeProfile?.label, 'Home-Test');
+      expect(store.remove('test').activeProfile, isNull);
+    });
+
     test('toJson/fromJson round-trips profiles and active id', () {
       final store = const ProfileStore.empty()
           .upsert(prof('prod', 'Home'))
