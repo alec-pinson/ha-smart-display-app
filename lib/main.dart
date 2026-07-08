@@ -41,7 +41,7 @@ void main() async {
   await WakelockPlus.enable();
 
   // Load persisted state before first frame
-  final alreadyPaired = await loadPairingState();
+  final profileStore = await loadProfileState();
   final initialWakeWord = await loadPersistedWakeWord();
   final initialWakeWordSensitivity = await loadPersistedWakeWordSensitivity();
   final initialVadSensitivity = await loadPersistedVadSensitivity();
@@ -54,7 +54,7 @@ void main() async {
   final container = ProviderContainer(
     overrides: [
       pairingProvider.overrideWith(
-        (ref) => PairingNotifier(alreadyPaired),
+        (ref) => PairingNotifier(profileStore),
       ),
       displayStateProvider.overrideWith(
         (ref) => DisplayStateNotifier(ref, initialWakeWord: initialWakeWord, initialWakeWordSensitivity: initialWakeWordSensitivity, initialVadSensitivity: initialVadSensitivity, initialWakeWordSound: initialWakeWordSound, initialMicrophoneMuted: initialMicrophoneMuted, initialVolume: initialVolume, initialBrightness: initialBrightness, initialAutoBrightness: initialAutoBrightness),
