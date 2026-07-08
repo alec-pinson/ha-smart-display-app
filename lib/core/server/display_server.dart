@@ -118,24 +118,30 @@ class DisplayServer {
     final role = _ref.read(pairingProvider).store.roleFor(instanceId);
     _log.d('DisplayServer: hello from $instanceId ($label) role=$role');
 
+    // Register the socket synchronously BEFORE any await, so it is in
+    // `_clients` before the event loop can deliver the next message. The
+    // integration sends its on-connect command burst (weather, immich_config,
+    // etc.) immediately after hello; if we awaited the profile persist first,
+    // those commands would arrive while the socket is still unserved and be
+    // dropped by the `_clients.contains(ws)` guard in _handleMessage.
     switch (role) {
       case ConnectionRole.reject:
         _send(ws, {'type': 'hello_error', 'reason': 'not_paired'});
       case ConnectionRole.adopt:
         // Legacy migration: first instance after upgrade becomes the profile.
+        _serve(ws, instanceId);
         await notifier.upsertInstance(InstanceProfile(
           instanceId: instanceId,
           label: label,
           host: host,
           lastSeen: DateTime.now(),
         ));
-        _serve(ws, instanceId);
       case ConnectionRole.serve:
-        await notifier.touchInstance(instanceId, label, host);
         _serve(ws, instanceId);
-      case ConnectionRole.park:
         await notifier.touchInstance(instanceId, label, host);
+      case ConnectionRole.park:
         _park(ws, instanceId);
+        await notifier.touchInstance(instanceId, label, host);
     }
   }
 
