@@ -3974,6 +3974,36 @@ class _InstanceRow extends StatelessWidget {
     required this.onRemove,
   });
 
+  Future<void> _confirmRemove(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Remove instance?',
+            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+        content: Text(
+          isActive
+              ? '${profile.label} is the active instance. Removing it will leave the display with no active instance until you pick another.'
+              : 'Remove ${profile.label} from this display?',
+          style: const TextStyle(color: Color(0xFF8B949E), fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8B949E))),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remove',
+                style: TextStyle(color: Color(0xFFF85149), fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) onRemove();
+  }
+
   @override
   Widget build(BuildContext context) {
     // Dot: green = active & connected, blue = connected (parked), grey = offline.
@@ -4015,7 +4045,7 @@ class _InstanceRow extends StatelessWidget {
                     style: TextStyle(color: Color(0xFF3FB950), fontSize: 12, fontWeight: FontWeight.w600)),
               ),
             GestureDetector(
-              onTap: onRemove,
+              onTap: () => _confirmRemove(context),
               behavior: HitTestBehavior.opaque,
               child: const Padding(
                 padding: EdgeInsets.all(4),
