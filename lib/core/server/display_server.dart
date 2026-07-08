@@ -232,7 +232,23 @@ class DisplayServer {
     }
   }
 
+  void _dropSocket(WebSocketChannel ws) {
+    _instanceOf.remove(ws);
+    if (_clients.remove(ws)) {
+      if (!_clientCountController.isClosed) {
+        _clientCountController.add(_clients.length);
+      }
+    }
+    try {
+      ws.sink.close();
+    } catch (_) {}
+  }
+
   void _serve(WebSocketChannel ws, String instanceId) {
+    final existing = _socketsByInstance[instanceId];
+    if (existing != null && existing != ws) {
+      _dropSocket(existing);
+    }
     _instanceOf[ws] = instanceId;
     _socketsByInstance[instanceId] = ws;
     _clients.add(ws);
@@ -244,6 +260,10 @@ class DisplayServer {
   }
 
   void _park(WebSocketChannel ws, String instanceId) {
+    final existing = _socketsByInstance[instanceId];
+    if (existing != null && existing != ws) {
+      _dropSocket(existing);
+    }
     _instanceOf[ws] = instanceId;
     _socketsByInstance[instanceId] = ws;
     // Not added to _clients: receives no state, its commands are ignored.
@@ -264,6 +284,7 @@ class DisplayServer {
       _clients.add(ws);
       final state = _ref.read(displayStateProvider);
       _send(ws, {'type': 'state', 'state': state.toJson()});
+      _lastStateReceived = DateTime.now();
     }
     _clientCountController.add(_clients.length);
     _log.i('DisplayServer: active instance applied -> $instanceId');
@@ -272,6 +293,7 @@ class DisplayServer {
   /// Switch the active instance from the UI. Persists the choice and, if that
   /// instance is currently connected, promotes it immediately.
   Future<void> setActiveInstance(String instanceId) async {
+    if (!_ref.read(pairingProvider).store.hasProfile(instanceId)) return;
     await _ref.read(pairingProvider.notifier).setActive(instanceId);
     _applyActive(instanceId, null);
   }
@@ -280,9 +302,7 @@ class DisplayServer {
   Future<void> forgetInstance(String instanceId) async {
     await _ref.read(pairingProvider.notifier).removeProfile(instanceId);
     final ws = _socketsByInstance.remove(instanceId);
-    if (ws != null && _clients.remove(ws)) {
-      _clientCountController.add(_clients.length);
-    }
+    if (ws != null) _dropSocket(ws);
   }
 
   /// Instance ids that currently have an open socket (served or parked).
@@ -317,7 +337,7 @@ class DisplayServer {
   Future<void> stop() async {
     await _clientCountController.close();
     await _server?.close(force: true);
-    for (final c in _clients) {
+    for (final c in {..._clients, ..._socketsByInstance.values}) {
       await c.sink.close();
     }
     _clients.clear();
