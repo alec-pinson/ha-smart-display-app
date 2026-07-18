@@ -616,6 +616,13 @@ class DisplayStateNotifier extends StateNotifier<DisplayState> {
     });
   }
 
+  void sendPillTap(String pillId) {
+    _ref.read(displayServerProvider).sendEvent({
+      'event': 'pill_tap',
+      'pill_id': pillId,
+    });
+  }
+
   void setClimateTemperature(double temperature) {
     _ref.read(displayServerProvider).sendEvent({
       'event': 'climate_set_temperature',
