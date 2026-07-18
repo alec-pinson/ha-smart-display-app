@@ -20,6 +20,7 @@ import '../../core/pairing/instance_profile.dart';
 import '../../core/pairing/pairing_service.dart';
 import '../../core/server/display_server.dart';
 import '../../core/timer/timer_service.dart';
+import '../../core/util/tap_debouncer.dart';
 import '../../core/voice/voice_assistant_service.dart';
 import '../../core/camera_analysis/camera_analysis_service.dart';
 import '../../core/wake_word/wake_word_service.dart';
@@ -3254,9 +3255,17 @@ class _UnderClockPills extends StatelessWidget {
   }
 }
 
-class _Pill extends StatelessWidget {
+class _Pill extends ConsumerStatefulWidget {
   final PillData pill;
   const _Pill({required this.pill});
+
+  @override
+  ConsumerState<_Pill> createState() => _PillState();
+}
+
+class _PillState extends ConsumerState<_Pill> {
+  final TapDebouncer _debouncer = TapDebouncer();
+  bool _pressed = false;
 
   static const _iconMap = <String, IconData>{
     'door': Icons.door_front_door,
@@ -3279,33 +3288,50 @@ class _Pill extends StatelessWidget {
     return null;
   }
 
+  void _onTap() {
+    if (!_debouncer.accept()) return;
+    ref.read(displayStateProvider.notifier).sendPillTap(widget.pill.id);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final iconData = _iconMap[pill.icon];
-    final bg = _parseColor(pill.color) ?? Colors.white.withOpacity(0.15);
-    final (double padH, double padV, double iconSz, double fontSize) = switch (pill.size) {
+    final iconData = _iconMap[widget.pill.icon];
+    final bg = _parseColor(widget.pill.color) ?? Colors.white.withOpacity(0.15);
+    final (double padH, double padV, double iconSz, double fontSize) = switch (widget.pill.size) {
       'small' => (16.0, 8.0, 20.0, 17.0),
       'large'  => (24.0, 12.0, 28.0, 24.0),
       _        => (20.0, 10.0, 24.0, 20.0),
     };
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(50),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (iconData != null) ...[
-            Icon(iconData, color: Colors.white, size: iconSz),
-            SizedBox(width: iconSz * 0.375),
-          ],
-          Text(
-            pill.text,
-            style: TextStyle(color: Colors.white, fontSize: fontSize),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: _onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.95 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(50),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (iconData != null) ...[
+                Icon(iconData, color: Colors.white, size: iconSz),
+                SizedBox(width: iconSz * 0.375),
+              ],
+              Text(
+                widget.pill.text,
+                style: TextStyle(color: Colors.white, fontSize: fontSize),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
