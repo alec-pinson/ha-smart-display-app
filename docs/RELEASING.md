@@ -46,7 +46,7 @@ Assistant.
 ## Promoting to stable
 
 ```bash
-# 1. Bump pubspec.yaml to version: 1.1.1+8  (higher than every beta above)
+# 1. Bump pubspec.yaml to version: 1.1.1+7  (higher than every beta above)
 # 2. Build
 flutter build apk --release
 # 3. Publish with no --prerelease flag
