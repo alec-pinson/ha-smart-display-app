@@ -20,6 +20,7 @@ import '../../core/pairing/instance_profile.dart';
 import '../../core/pairing/pairing_service.dart';
 import '../../core/server/display_server.dart';
 import '../../core/timer/timer_service.dart';
+import '../../core/util/tap_debouncer.dart';
 import '../../core/voice/voice_assistant_service.dart';
 import '../../core/camera_analysis/camera_analysis_service.dart';
 import '../../core/wake_word/wake_word_service.dart';
@@ -805,7 +806,7 @@ class _NormalOverlay extends ConsumerWidget {
               children: [
                 for (int i = 0; i < entry.value.length; i++) ...[
                   if (i > 0) const SizedBox(height: 6),
-                  _Pill(pill: entry.value[i]),
+                  _Pill(key: ValueKey(entry.value[i].id), pill: entry.value[i]),
                 ],
               ],
             ),
@@ -3246,7 +3247,7 @@ class _UnderClockPills extends StatelessWidget {
         children: [
           for (int i = 0; i < pills.length; i++) ...[
             if (i > 0) const SizedBox(height: 6),
-            _Pill(pill: pills[i]),
+            _Pill(key: ValueKey(pills[i].id), pill: pills[i]),
           ],
         ],
       ),
@@ -3254,9 +3255,33 @@ class _UnderClockPills extends StatelessWidget {
   }
 }
 
-class _Pill extends StatelessWidget {
+class _Pill extends ConsumerStatefulWidget {
   final PillData pill;
-  const _Pill({required this.pill});
+
+  /// Callers must pass a [ValueKey] of the pill id. `_Pill` is stateful and
+  /// pills are rebuilt positionally whenever HA pushes a new list, so without
+  /// a key Flutter would rebind State — and its tap debouncer — to the list
+  /// index rather than the pill.
+  const _Pill({super.key, required this.pill});
+
+  @override
+  ConsumerState<_Pill> createState() => _PillState();
+}
+
+class _PillState extends ConsumerState<_Pill> {
+  /// The press effect has to outlive the gesture. `_NormalOverlay` wraps the
+  /// whole screen in a horizontal-drag recogniser, so for a quick tap the
+  /// gesture arena does not resolve until pointer-up and Flutter delivers
+  /// onTapDown and onTapUp in the same frame. Clearing on onTapUp would mean
+  /// the animation never renders, so the pressed state is latched for
+  /// [_minPressHold] after release instead.
+  static const _pressDuration = Duration(milliseconds: 90);
+  static const _minPressHold = Duration(milliseconds: 200);
+
+  final TapDebouncer _debouncer = TapDebouncer();
+  Timer? _releaseTimer;
+  bool _pointerDown = false;
+  bool _pressed = false;
 
   static const _iconMap = <String, IconData>{
     'door': Icons.door_front_door,
@@ -3279,33 +3304,72 @@ class _Pill extends StatelessWidget {
     return null;
   }
 
+  void _onPointerDown() {
+    _releaseTimer?.cancel();
+    _pointerDown = true;
+    if (!_pressed) setState(() => _pressed = true);
+  }
+
+  void _onPointerUp() {
+    _pointerDown = false;
+    _releaseTimer?.cancel();
+    _releaseTimer = Timer(_minPressHold, () {
+      if (mounted && !_pointerDown) setState(() => _pressed = false);
+    });
+  }
+
+  void _onTap() {
+    if (!_debouncer.accept()) return;
+    ref.read(displayStateProvider.notifier).sendPillTap(widget.pill.id);
+  }
+
+  @override
+  void dispose() {
+    _releaseTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final iconData = _iconMap[pill.icon];
-    final bg = _parseColor(pill.color) ?? Colors.white.withOpacity(0.15);
-    final (double padH, double padV, double iconSz, double fontSize) = switch (pill.size) {
+    final iconData = _iconMap[widget.pill.icon];
+    final bg = _parseColor(widget.pill.color) ?? Colors.white.withOpacity(0.15);
+    final (double padH, double padV, double iconSz, double fontSize) = switch (widget.pill.size) {
       'small' => (16.0, 8.0, 20.0, 17.0),
       'large'  => (24.0, 12.0, 28.0, 24.0),
       _        => (20.0, 10.0, 24.0, 20.0),
     };
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(50),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (iconData != null) ...[
-            Icon(iconData, color: Colors.white, size: iconSz),
-            SizedBox(width: iconSz * 0.375),
-          ],
-          Text(
-            pill.text,
-            style: TextStyle(color: Colors.white, fontSize: fontSize),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _onPointerDown(),
+      onTapUp: (_) => _onPointerUp(),
+      onTapCancel: _onPointerUp,
+      onTap: _onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: _pressDuration,
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: _pressDuration,
+          curve: Curves.easeOut,
+          padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
+          decoration: BoxDecoration(
+            color: _pressed ? Color.alphaBlend(Colors.white.withOpacity(0.28), bg) : bg,
+            borderRadius: BorderRadius.circular(50),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (iconData != null) ...[
+                Icon(iconData, color: Colors.white, size: iconSz),
+                SizedBox(width: iconSz * 0.375),
+              ],
+              Text(
+                widget.pill.text,
+                style: TextStyle(color: Colors.white, fontSize: fontSize),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
