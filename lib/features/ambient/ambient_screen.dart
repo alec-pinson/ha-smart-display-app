@@ -806,7 +806,7 @@ class _NormalOverlay extends ConsumerWidget {
               children: [
                 for (int i = 0; i < entry.value.length; i++) ...[
                   if (i > 0) const SizedBox(height: 6),
-                  _Pill(pill: entry.value[i]),
+                  _Pill(key: ValueKey(entry.value[i].id), pill: entry.value[i]),
                 ],
               ],
             ),
@@ -3247,7 +3247,7 @@ class _UnderClockPills extends StatelessWidget {
         children: [
           for (int i = 0; i < pills.length; i++) ...[
             if (i > 0) const SizedBox(height: 6),
-            _Pill(pill: pills[i]),
+            _Pill(key: ValueKey(pills[i].id), pill: pills[i]),
           ],
         ],
       ),
@@ -3257,7 +3257,12 @@ class _UnderClockPills extends StatelessWidget {
 
 class _Pill extends ConsumerStatefulWidget {
   final PillData pill;
-  const _Pill({required this.pill});
+
+  /// Callers must pass a [ValueKey] of the pill id. `_Pill` is stateful and
+  /// pills are rebuilt positionally whenever HA pushes a new list, so without
+  /// a key Flutter would rebind State — and its tap debouncer — to the list
+  /// index rather than the pill.
+  const _Pill({super.key, required this.pill});
 
   @override
   ConsumerState<_Pill> createState() => _PillState();
