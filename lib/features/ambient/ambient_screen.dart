@@ -3269,7 +3269,18 @@ class _Pill extends ConsumerStatefulWidget {
 }
 
 class _PillState extends ConsumerState<_Pill> {
+  /// The press effect has to outlive the gesture. `_NormalOverlay` wraps the
+  /// whole screen in a horizontal-drag recogniser, so for a quick tap the
+  /// gesture arena does not resolve until pointer-up and Flutter delivers
+  /// onTapDown and onTapUp in the same frame. Clearing on onTapUp would mean
+  /// the animation never renders, so the pressed state is latched for
+  /// [_minPressHold] after release instead.
+  static const _pressDuration = Duration(milliseconds: 90);
+  static const _minPressHold = Duration(milliseconds: 200);
+
   final TapDebouncer _debouncer = TapDebouncer();
+  Timer? _releaseTimer;
+  bool _pointerDown = false;
   bool _pressed = false;
 
   static const _iconMap = <String, IconData>{
@@ -3293,9 +3304,29 @@ class _PillState extends ConsumerState<_Pill> {
     return null;
   }
 
+  void _onPointerDown() {
+    _releaseTimer?.cancel();
+    _pointerDown = true;
+    if (!_pressed) setState(() => _pressed = true);
+  }
+
+  void _onPointerUp() {
+    _pointerDown = false;
+    _releaseTimer?.cancel();
+    _releaseTimer = Timer(_minPressHold, () {
+      if (mounted && !_pointerDown) setState(() => _pressed = false);
+    });
+  }
+
   void _onTap() {
     if (!_debouncer.accept()) return;
     ref.read(displayStateProvider.notifier).sendPillTap(widget.pill.id);
+  }
+
+  @override
+  void dispose() {
+    _releaseTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -3309,18 +3340,20 @@ class _PillState extends ConsumerState<_Pill> {
     };
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
+      onTapDown: (_) => _onPointerDown(),
+      onTapUp: (_) => _onPointerUp(),
+      onTapCancel: _onPointerUp,
       onTap: _onTap,
       child: AnimatedScale(
-        scale: _pressed ? 0.95 : 1.0,
-        duration: const Duration(milliseconds: 100),
+        scale: _pressed ? 0.92 : 1.0,
+        duration: _pressDuration,
         curve: Curves.easeOut,
-        child: Container(
+        child: AnimatedContainer(
+          duration: _pressDuration,
+          curve: Curves.easeOut,
           padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
           decoration: BoxDecoration(
-            color: bg,
+            color: _pressed ? Color.alphaBlend(Colors.white.withOpacity(0.28), bg) : bg,
             borderRadius: BorderRadius.circular(50),
           ),
           child: Row(
