@@ -2,6 +2,10 @@
 
 The device-side Flutter app for the [HA Smart Display](https://github.com/alec-pinson/ha-smart-display-integration) Home Assistant integration. Runs on an Amazon Echo Show 8 (LineageOS) as a full-screen kiosk that connects to Home Assistant over a local WebSocket.
 
+## Screenshots
+
+_Coming soon._
+
 ## Features
 
 - **Weather** — real-time conditions and hourly/daily forecast
@@ -17,8 +21,13 @@ The device-side Flutter app for the [HA Smart Display](https://github.com/alec-p
 
 ## Requirements
 
-- Amazon Echo Show 8 running LineageOS (or equivalent Android 8+ device with ADB access)
-- [HA Smart Display integration](https://github.com/alec-pinson/ha-smart-display-integration) installed in Home Assistant
+- **Amazon Echo Show 8 running LineageOS.** Getting LineageOS onto an Echo Show is
+  out of scope for this project — you will need to research that for your specific
+  device and hardware revision before anything here is useful to you.
+- Any other Android 8+ device with ADB access will also run the app, though it is
+  only developed and tested against the Echo Show 8.
+- [HA Smart Display integration](https://github.com/alec-pinson/ha-smart-display-integration)
+  installed in Home Assistant.
 
 ## Installation
 
@@ -58,7 +67,33 @@ Once paired, the HA integration checks GitHub Releases daily for new app version
 
 To trigger an immediate check: HA → **Settings → Devices** → find your display → press the **Check for Updates** button.
 
+## Multiple Home Assistant Instances
+
+The display can be paired with more than one Home Assistant instance and switched
+between them without re-pairing — useful if you run a test instance alongside your
+live one.
+
+Tap the connection dot in the top-right corner to open the **Device Status**
+dialog. The dot is hidden in ambient mode, so tap the screen once to wake the
+display first if you don't see it.
+
+The **Instances** section lists every instance the display has been paired with,
+shows which is currently active, and offers **Add instance** to pair another.
+
+Only the active instance is served. The others stay connected but are held
+inactive, and how they appear in Home Assistant depends on how they got there:
+
+- An instance that has **never been active** shows the display as unavailable.
+- An instance you have **switched away from** keeps its last-known state and may
+  still show as available until it reconnects.
+
+Either way it means "the display is currently on the other instance". Switching
+is instant; no reconnect or restart is needed.
+
 ## Building from Source
+
+Most users should install the APK from [Releases](https://github.com/alec-pinson/ha-smart-display-app/releases/latest)
+and update over the air. Build from source only if you are modifying the app.
 
 Requires Flutter 3.x and Java 17.
 
@@ -72,3 +107,14 @@ The release APK will be at `build/app/outputs/flutter-apk/app-release.apk`.
 ## Companion Integration
 
 Configure features (weather, cameras, climate, Immich, Music Assistant, etc.) via the [HA Smart Display integration](https://github.com/alec-pinson/ha-smart-display-integration).
+
+## Sponsor
+
+If you find this project useful, you can support its development:
+
+- [Ko-fi](https://ko-fi.com/alecpinson)
+- [PayPal](https://paypal.me/alecpinson1)
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
