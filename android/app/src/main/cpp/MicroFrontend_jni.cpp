@@ -34,11 +34,11 @@ JNIEXPORT void JNI_OnUnload(JavaVM* vm, void* reserved) {
     if (g_arrayListClass) { env->DeleteGlobalRef(g_arrayListClass); g_arrayListClass = nullptr; }
 }
 
-// Package: com.example.ha_smart_display → com_example_ha_1smart_1display
+// Package: com.alecpinson.ha_smart_display → com_alecpinson_ha_1smart_1display
 // Class: MicroFrontend
 
 JNIEXPORT jlong JNICALL
-Java_com_example_ha_1smart_1display_MicroFrontend_nativeCreate(
+Java_com_alecpinson_ha_1smart_1display_MicroFrontend_nativeCreate(
         JNIEnv* env, jclass, jint sampleRate, jint stepSizeMs) {
     auto* wrapper = new MicroFrontendWrapper(sampleRate, (size_t)stepSizeMs);
     if (!wrapper->isInitialized()) { delete wrapper; return 0; }
@@ -46,13 +46,13 @@ Java_com_example_ha_1smart_1display_MicroFrontend_nativeCreate(
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_ha_1smart_1display_MicroFrontend_nativeDestroy(
+Java_com_alecpinson_ha_1smart_1display_MicroFrontend_nativeDestroy(
         JNIEnv* env, jclass, jlong handle) {
     if (handle) delete reinterpret_cast<MicroFrontendWrapper*>(handle);
 }
 
 JNIEXPORT jobject JNICALL
-Java_com_example_ha_1smart_1display_MicroFrontend_nativeProcessSamples(
+Java_com_alecpinson_ha_1smart_1display_MicroFrontend_nativeProcessSamples(
         JNIEnv* env, jclass, jlong handle, jshortArray samplesArray) {
     if (!handle || !g_arrayListClass) return nullptr;
     auto* wrapper = reinterpret_cast<MicroFrontendWrapper*>(handle);
@@ -79,7 +79,7 @@ Java_com_example_ha_1smart_1display_MicroFrontend_nativeProcessSamples(
 }
 
 JNIEXPORT void JNICALL
-Java_com_example_ha_1smart_1display_MicroFrontend_nativeReset(
+Java_com_alecpinson_ha_1smart_1display_MicroFrontend_nativeReset(
         JNIEnv* env, jclass, jlong handle) {
     if (handle) reinterpret_cast<MicroFrontendWrapper*>(handle)->reset();
 }

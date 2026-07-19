@@ -39,7 +39,7 @@ To find your device ID: `adb devices`
 Run this once per device to allow the app to install its own updates (the standard system install dialog will still appear on screen):
 
 ```bash
-adb -s <device-id> shell appops set com.example.ha_smart_display REQUEST_INSTALL_PACKAGES allow
+adb -s <device-id> shell appops set com.alecpinson.ha_smart_display REQUEST_INSTALL_PACKAGES allow
 ```
 
 ## First Launch
