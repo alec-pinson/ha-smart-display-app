@@ -73,9 +73,12 @@ The display can be paired with more than one Home Assistant instance and switche
 between them without re-pairing — useful if you run a test instance alongside your
 live one.
 
-Tap the connection dot to open the **Device Status** dialog. The **Instances**
-section lists every instance the display has been paired with, shows which is
-currently active, and offers **Add instance** to pair another.
+Tap the connection dot in the top-right corner to open the **Device Status**
+dialog. The dot is hidden in ambient mode, so tap the screen once to wake the
+display first if you don't see it.
+
+The **Instances** section lists every instance the display has been paired with,
+shows which is currently active, and offers **Add instance** to pair another.
 
 Only the active instance is served. The others stay connected but are held
 inactive, so they will show the display as unavailable — this is expected, and
