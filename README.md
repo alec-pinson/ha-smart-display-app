@@ -81,9 +81,14 @@ The **Instances** section lists every instance the display has been paired with,
 shows which is currently active, and offers **Add instance** to pair another.
 
 Only the active instance is served. The others stay connected but are held
-inactive, so they will show the display as unavailable — this is expected, and
-means "the display is currently on the other instance". Switching is instant; no
-reconnect or restart is needed.
+inactive, and how they appear in Home Assistant depends on how they got there:
+
+- An instance that has **never been active** shows the display as unavailable.
+- An instance you have **switched away from** keeps its last-known state and may
+  still show as available until it reconnects.
+
+Either way it means "the display is currently on the other instance". Switching
+is instant; no reconnect or restart is needed.
 
 ## Building from Source
 
