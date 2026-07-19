@@ -1,4 +1,4 @@
-package com.example.ha_smart_display
+package com.alecpinson.ha_smart_display
 
 import android.content.Context
 import android.net.nsd.NsdManager

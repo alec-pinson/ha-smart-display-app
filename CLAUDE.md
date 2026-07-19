@@ -12,7 +12,7 @@ JAVA_HOME=/usr/local/opt/openjdk@17 flutter run -d emulator-5554
 adb -s emulator-5554 forward tcp:8472 tcp:8472
 
 # Reset pairing state
-adb -s emulator-5554 shell pm clear com.example.ha_smart_display
+adb -s emulator-5554 shell pm clear com.alecpinson.ha_smart_display
 
 # Build + install on Echo Show 8 (device ID: G0918309042301JB)
 JAVA_HOME=/usr/local/opt/openjdk@17 flutter build apk --debug

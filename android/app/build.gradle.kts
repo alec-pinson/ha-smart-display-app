@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.ha_smart_display"
+    namespace = "com.alecpinson.ha_smart_display"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -28,7 +28,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.ha_smart_display"
+        applicationId = "com.alecpinson.ha_smart_display"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
