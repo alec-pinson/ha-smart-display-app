@@ -3294,6 +3294,7 @@ class _PillState extends ConsumerState<_Pill> {
     'lock': Icons.lock_open,
     'temperature': Icons.thermostat,
     'person': Icons.person,
+    'trash': Icons.delete,
   };
 
   Color? _parseColor(String? hex) {
