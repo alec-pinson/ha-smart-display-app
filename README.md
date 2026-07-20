@@ -18,6 +18,8 @@ _Coming soon._
 - **Notifications** — push dialog, toast, and banner notifications from HA automations
 - **Auto-discovery** — device appears in HA via Zeroconf (no manual IP entry needed)
 - **OTA updates** — install new app versions directly from HA Settings → Updates
+- **Screenshots** — capture the screen on demand from Home Assistant, for
+  remote troubleshooting or grabbing images of each mode
 
 ## Requirements
 
