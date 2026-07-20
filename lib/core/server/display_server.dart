@@ -15,6 +15,7 @@ import '../display_state/display_state_notifier.dart';
 import '../ota/ota_update_service.dart';
 import '../pairing/instance_profile.dart';
 import '../pairing/pairing_service.dart';
+import '../screenshot/screenshot_service.dart';
 
 final _log = Logger();
 const _port = 8472;
@@ -190,6 +191,11 @@ class DisplayServer {
       } else {
         _log.w('DisplayServer: ota_update command missing url');
       }
+      return;
+    }
+    if (payload['action'] == 'screenshot') {
+      // Fire-and-forget: the reply arrives later as a `screenshot` event.
+      _ref.read(screenshotServiceProvider).handleRequest();
       return;
     }
     _ref.read(displayStateProvider.notifier).applyCommand(payload);
